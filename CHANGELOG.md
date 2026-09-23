@@ -4,7 +4,7 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
-## [3.5.0] - 2026-09-23
+## [3.5.1] - 2026-09-23
 
 Unison: real-time collaborative vault sync over a hosted WebSocket server.
 
@@ -34,6 +34,11 @@ Unison: real-time collaborative vault sync over a hosted WebSocket server.
 
 ### Changed
 
+- The Plan cards are hidden when "My own server" is selected (plans apply to
+  the hosted relay only).
+- The Advanced section is gone: the language selector moved to the bottom of
+  settings, and the in-app self-hosting guide was removed (the docs live in the
+  repository).
 - Settings reorganized into Room, Plan, Profile, Sync, Updates and a collapsible
   Advanced section.
 - Connection fields are down to three: server address, API key and room key.

@@ -997,35 +997,37 @@ class UnisonSettingTab extends PluginSettingTab {
 				}));
 		}
 
-		// ── plan (cards) ───────────────────────────────────────
-		h3(p.t('planSection'));
-		const cards = containerEl.createDiv({ cls: 'unison-cards' });
+		// ── plan (cards, hosting only) ─────────────────────────
+		if (p.settings.serverMode === 'hosted') {
+			h3(p.t('planSection'));
+			const cards = containerEl.createDiv({ cls: 'unison-cards' });
 
-		const free = cards.createDiv({ cls: 'unison-card' + (p.roomPlan !== 'pro' ? ' is-active' : '') });
-		free.createDiv({ cls: 'unison-card-title', text: p.t('planFree') });
-		free.createDiv({ cls: 'unison-card-price', text: '$0' });
-		free.createDiv({ cls: 'unison-card-desc', text: p.t('planFreeDesc') });
-		if (p.roomPlan !== 'pro') free.createSpan({ cls: 'unison-card-badge', text: p.t('planCurrentBadge') });
+			const free = cards.createDiv({ cls: 'unison-card' + (p.roomPlan !== 'pro' ? ' is-active' : '') });
+			free.createDiv({ cls: 'unison-card-title', text: p.t('planFree') });
+			free.createDiv({ cls: 'unison-card-price', text: '$0' });
+			free.createDiv({ cls: 'unison-card-desc', text: p.t('planFreeDesc') });
+			if (p.roomPlan !== 'pro') free.createSpan({ cls: 'unison-card-badge', text: p.t('planCurrentBadge') });
 
-		const pro = cards.createDiv({ cls: 'unison-card unison-card-pro' + (p.roomPlan === 'pro' ? ' is-active' : '') });
-		pro.createDiv({ cls: 'unison-card-title', text: p.t('planPro') });
-		const price = pro.createDiv({ cls: 'unison-card-price' });
-		price.createSpan({ text: '$3' });
-		price.createSpan({ cls: 'unison-card-price-sub', text: ' ' + p.t('planPerMonth') });
-		pro.createDiv({ cls: 'unison-card-desc', text: p.t('planProDesc') });
-		if (p.roomPlan === 'pro') pro.createSpan({ cls: 'unison-card-badge', text: p.t('planCurrentBadge') });
-		const buy = pro.createEl('button', { cls: 'unison-btn unison-card-btn is-soon', text: p.t('planSoon') });
-		buy.disabled = true;
-		buy.setAttribute('title', p.t('planSoon'));
-		const lic = pro.createEl('input', { cls: 'unison-card-input', type: 'text', placeholder: 'UNISON-...' });
-		lic.value = p.settings.license || '';
-		const applyLic = async () => {
-			p.settings.license = (lic.value || '').trim();
-			await p.saveSettings();
-			if (p.connected) { p.disconnect(true); p.connect(true); }
-		};
-		lic.onchange = applyLic;
-		lic.onblur = applyLic;
+			const pro = cards.createDiv({ cls: 'unison-card unison-card-pro' + (p.roomPlan === 'pro' ? ' is-active' : '') });
+			pro.createDiv({ cls: 'unison-card-title', text: p.t('planPro') });
+			const price = pro.createDiv({ cls: 'unison-card-price' });
+			price.createSpan({ text: '$3' });
+			price.createSpan({ cls: 'unison-card-price-sub', text: ' ' + p.t('planPerMonth') });
+			pro.createDiv({ cls: 'unison-card-desc', text: p.t('planProDesc') });
+			if (p.roomPlan === 'pro') pro.createSpan({ cls: 'unison-card-badge', text: p.t('planCurrentBadge') });
+			const buy = pro.createEl('button', { cls: 'unison-btn unison-card-btn is-soon', text: p.t('planSoon') });
+			buy.disabled = true;
+			buy.setAttribute('title', p.t('planSoon'));
+			const lic = pro.createEl('input', { cls: 'unison-card-input', type: 'text', placeholder: 'UNISON-...' });
+			lic.value = p.settings.license || '';
+			const applyLic = async () => {
+				p.settings.license = (lic.value || '').trim();
+				await p.saveSettings();
+				if (p.connected) { p.disconnect(true); p.connect(true); }
+			};
+			lic.onchange = applyLic;
+			lic.onblur = applyLic;
+		}
 
 		// ── profile ────────────────────────────────────────────
 		h3(p.t('profileSection'));
@@ -1075,12 +1077,8 @@ class UnisonSettingTab extends PluginSettingTab {
 			.setDesc(p.t('updateDesc'))
 			.addButton(b => b.setButtonText(p.t('checkUpdate')).onClick(() => p.checkForUpdate(true)));
 
-		// ── advanced ───────────────────────────────────────────
-		const adv = containerEl.createEl('details', { cls: 'unison-guide' });
-		adv.createEl('summary', { text: p.t('advanced') });
-		const advBody = adv.createDiv({ cls: 'unison-guide-body' });
-
-		new Setting(advBody)
+		// ── language (bottom) ──────────────────────────────────
+		new Setting(containerEl)
 			.setName(p.t('langLabel'))
 			.setDesc(p.t('langDesc'))
 			.addDropdown(d => d
@@ -1089,29 +1087,6 @@ class UnisonSettingTab extends PluginSettingTab {
 				.addOption('ru', 'Русский')
 				.setValue(p.settings.lang || '')
 				.onChange(async v => { p.settings.lang = v; await p.saveSettings(); this.display(); p.refreshPresence(); }));
-
-		// ── guide: host your own server ─────────────────────────
-		const det = advBody.createEl('details', { cls: 'unison-guide' });
-		det.createEl('summary', { text: p.t('guideSummary') });
-		const body = det.createDiv({ cls: 'unison-guide-body' });
-		body.createEl('p', { text: p.t('guideHint') });
-		const pre = body.createEl('pre', { cls: 'unison-status-pre' });
-		pre.setText([
-			'# 1. On the server (Ubuntu/Debian), Node.js 18+',
-			'apt-get install -y nodejs git',
-			'',
-			'# 2. Copy server.js (see the GitHub repo) and run it',
-			'mkdir -p /opt/unison && cd /opt/unison',
-			'PORT=3000 DATA_DIR=/opt/unison/data node server.js',
-			'',
-			'# 3. Open the port (ufw example)',
-			'ufw allow 3000/tcp',
-			'',
-			'# 4. In the plugin settings enter:',
-			'#   Server: ws://your-server-ip:3000',
-			'#   Room:   any shared name',
-		].join('\n'));
-		body.createEl('p', { cls: 'unison-settings-hint', text: p.t('guideFooter') });
 	}
 }
 
