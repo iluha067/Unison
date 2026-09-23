@@ -1,7 +1,7 @@
 # dependencies
 node_modules/
 
-# server runtime data (rooms + history) — never commit vault content
+# server runtime data (rooms + history) - never commit vault content
 server/data/
 data/
 

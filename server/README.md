@@ -22,10 +22,10 @@ API_KEY="your-long-random-key" PORT=3000 DATA_DIR=./data node server.js
 
 ## Endpoints
 
-- `GET /health` — JSON status
-- `GET /rooms` — rooms with user/file counts
-- `GET /metrics` — Prometheus-style metrics
-- `GET /plugin/<file>` — optional plugin-file hosting (`PLUGIN_DIR`)
+- `GET /health` - JSON status
+- `GET /rooms` - rooms with user/file counts
+- `GET /metrics` - Prometheus-style metrics
+- `GET /plugin/<file>` - optional plugin-file hosting (`PLUGIN_DIR`)
 
 ## Tests
 

@@ -13,7 +13,7 @@ A client must send `hello` first; any other message before that is answered with
 | --- | --- | --- |
 | `hello` | `room`, `user`, `clientId`, `color`, `token`, `apiKey`, `files?`, `device?` | Join a room. `apiKey` must match the server when auth is on. |
 | `ping` | `t` | Latency probe. |
-| `list` | — | Ask for the full server file index. |
+| `list` | - | Ask for the full server file index. |
 | `file-update` | `path`, `content`, `encoding`, `mtime?` | `encoding` is `utf8` (default) or `base64`. |
 | `file-delete` | `path` | |
 | `file-rename` | `oldPath`, `newPath` | Server migrates content and history. |
@@ -63,6 +63,6 @@ Rate limits, oversized files and per-room storage limits are reported as
 
 ## Version history
 
-Only the *previous* copy of a changed file is pushed into history — that is why
+Only the *previous* copy of a changed file is pushed into history - that is why
 the first update to a file creates no version (there is nothing older to keep).
 History is bounded by `MAX_HIST`, `HIST_MAX_BYTES` and `HIST_TOTAL_BYTES`.

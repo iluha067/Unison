@@ -14,7 +14,7 @@ const UPDATE_REPO = 'https://raw.githubusercontent.com/iluha067/Unison/main';
 
 ## Public repository
 
-Nothing to configure — files are fetched over the raw CDN with a cache-buster
+Nothing to configure - files are fetched over the raw CDN with a cache-buster
 (`?t=<timestamp>`).
 
 ## Private repository

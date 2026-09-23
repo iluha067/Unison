@@ -94,6 +94,6 @@ Then use `wss://sync.example.com` in the plugin. If you bind the server to
 
 - **Health**: `curl https://sync.example.com/health`
 - **Metrics**: `curl https://sync.example.com/metrics`
-- **Backups**: snapshot `DATA_DIR` — it holds the plain files and `.history/`.
+- **Backups**: snapshot `DATA_DIR` - it holds the plain files and `.history/`.
 - **Upgrades**: replace `server.js`, `npm install`, restart. In-memory state is
   rebuilt from disk on first join per room.

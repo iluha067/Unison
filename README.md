@@ -10,7 +10,7 @@ version history.
 ## Repository layout
 
 ```
-manifest.json   Obsidian plugin (id: unison) — kept at the repo root
+manifest.json   Obsidian plugin (id: unison) - kept at the repo root
 main.js         the entire plugin, no build step
 styles.css
 versions.json
@@ -24,22 +24,22 @@ The plugin files live at the repository root because that is where Obsidian and
 
 ## Features
 
-- **Live collaboration** — file updates, deletes and renames are broadcast to
+- **Live collaboration** - file updates, deletes and renames are broadcast to
   everyone in the room within milliseconds.
-- **Three-way merge** — concurrent typing is merged in place (per-line diff),
+- **Three-way merge** - concurrent typing is merged in place (per-line diff),
   never silently overwritten or duplicated. Falls back to line union when the
   common base is unknown.
-- **Text + binary** — text as UTF-8, everything else (images, PDFs, audio…)
+- **Text + binary** - text as UTF-8, everything else (images, PDFs, audio…)
   as base64.
-- **Presence** — participant panel, remote carets and selection highlights
+- **Presence** - participant panel, remote carets and selection highlights
   drawn as overlays (the note text itself is never touched), file-tree badges,
   typing indicators.
-- **File history** — the server keeps the last N versions per file; restore any
+- **File history** - the server keeps the last N versions per file; restore any
   of them from the command palette.
-- **Scope control** — whole vault or selected folders, optional text-only mode,
+- **Scope control** - whole vault or selected folders, optional text-only mode,
   exclude patterns.
-- **Quick connect** — share server/room/keys as a single paste-able code.
-- **Self-update** — the plugin updates itself from this repository (works with
+- **Quick connect** - share server/room/keys as a single paste-able code.
+- **Self-update** - the plugin updates itself from this repository (works with
   either a public or a private repo, see `docs/private-updates.md`).
 
 ## Install the plugin
@@ -64,7 +64,7 @@ GitHub releases and accepts **private** repositories too:
 4. Enable **Unison** in **Settings → Community plugins**.
 
 To let *other people* install without GitHub access, the repository has to be
-**public** — see [`docs/private-updates.md`](docs/private-updates.md).
+**public** - see [`docs/private-updates.md`](docs/private-updates.md).
 
 ## Run your own server
 
@@ -81,11 +81,11 @@ value, and pick a shared **Room** name.
 
 ## Documentation
 
-- [`docs/protocol.md`](docs/protocol.md) — WebSocket message reference.
-- [`docs/self-hosting.md`](docs/self-hosting.md) — server setup, systemd, TLS.
-- [`docs/private-updates.md`](docs/private-updates.md) — self-update and tokens.
-- [`SECURITY.md`](SECURITY.md) — threat model and hardening checklist.
-- [`CHANGELOG.md`](CHANGELOG.md) — version history.
+- [`docs/protocol.md`](docs/protocol.md) - WebSocket message reference.
+- [`docs/self-hosting.md`](docs/self-hosting.md) - server setup, systemd, TLS.
+- [`docs/private-updates.md`](docs/private-updates.md) - self-update and tokens.
+- [`SECURITY.md`](SECURITY.md) - threat model and hardening checklist.
+- [`CHANGELOG.md`](CHANGELOG.md) - version history.
 
 ## Development
 

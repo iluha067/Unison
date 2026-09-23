@@ -1,5 +1,5 @@
 /*
- * Unison server — WebSocket hub for the Unison Obsidian plugin.
+ * Unison server - WebSocket hub for the Unison Obsidian plugin.
  *
  *  - Rooms: clients that send the same `room` string see each other.
  *  - The server is the source of truth: files are persisted to
@@ -33,7 +33,7 @@ let WebSocketServer;
 try {
   ({ WebSocketServer } = require('ws'));
 } catch (e) {
-  console.error('[unison] missing dependency "ws" — run `npm install` first');
+  console.error('[unison] missing dependency "ws" - run `npm install` first');
   throw e;
 }
 
@@ -720,7 +720,7 @@ if (require.main === module) {
     server.log('info', `unison server ${pkg.version} listening on ${c.host}:${c.port}`);
     server.log('info', `data dir: ${c.dataDir}`);
     server.log('info', `auth ${c.apiKey ? 'ENABLED (API_KEY set)' : c.requireAuth ? 'ENABLED (REQUIRE_AUTH, no key -> all rejected!)' : 'DISABLED'}, room token ${c.roomToken ? 'set' : 'not set'}`);
-    if (!c.apiKey && !c.requireAuth) server.log('warn', 'API_KEY is empty — anyone who knows the address can connect. Set API_KEY in production.');
+    if (!c.apiKey && !c.requireAuth) server.log('warn', 'API_KEY is empty - anyone who knows the address can connect. Set API_KEY in production.');
   }).catch((e) => {
     console.error('[unison] failed to start:', e.message);
     process.exit(1);

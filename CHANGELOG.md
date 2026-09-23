@@ -4,7 +4,7 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
-## [3.0.0] — 2026-09-23
+## [3.0.0] - 2026-09-23
 
 Rebrand of "UnisonSync" to **Unison** plus a security and reliability pass.
 
@@ -45,7 +45,7 @@ Rebrand of "UnisonSync" to **Unison** plus a security and reliability pass.
 - `/health` reports the real package version instead of a hard-coded string.
 - Idle rooms no longer leak memory; empty rooms are unloaded on a timer.
 
-## [2.5.1] — legacy
+## [2.5.1] - legacy
 
 Last release under the `unison-sync` id: three-way merge, file history, folder
 scope, presence overlay and quick connect.
