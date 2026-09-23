@@ -892,7 +892,6 @@ class UnisonSettingTab extends PluginSettingTab {
 		containerEl.addClass('unison-settings');
 
 		containerEl.createEl('h2', { text: 'Unison' });
-		containerEl.createDiv({ cls: 'unison-settings-hint', text: p.t('tabHint') });
 
 		const h3 = (t) => containerEl.createEl('h3', { cls: 'unison-set-h3', text: t });
 
