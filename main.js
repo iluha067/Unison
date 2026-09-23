@@ -13,7 +13,7 @@
  * Source of truth: https://github.com/iluha067/Unison
  */
 
-const { Plugin, ItemView, Notice, PluginSettingTab, Setting, MarkdownView, normalizePath, Modal, setIcon, requestUrl, Platform } = require('obsidian');
+const { Plugin, ItemView, Notice, PluginSettingTab, Setting, MarkdownView, normalizePath, Modal, setIcon, requestUrl } = require('obsidian');
 
 const VIEW_TYPE_PRESENCE = 'unison-presence';
 // Raw GitHub base for self-updates.
@@ -23,8 +23,6 @@ const OFFICIAL_SERVER = 'ws://94.156.179.131:3000';
 // Payment link shown by the "Get Pro" button. Replace with your own page
 // (Gumroad, Boosty, Stripe, ...) that delivers a license key after payment.
 const BUY_URL = 'https://github.com/iluha067/Unison#plans';
-// Server source used by the built-in "host on this computer" feature (desktop).
-const HOST_SERVER_URL = UPDATE_REPO + '/server/server.js';
 const RECONNECT_MAX = 30000;
 const DEBOUNCE_MS = 300;
 const CURSOR_THROTTLE_MS = 150;
@@ -64,11 +62,6 @@ const DEFAULT_SETTINGS = {
 	shareCursor: true,
 	showRemoteLines: true, // highlight lines where collaborators stand (CSS only, never touches text)
 	lang: '',            // '' = auto (system), 'en', 'ru'
-	hostEnabled: false,  // desktop: run the server locally (auto-start on launch)
-	hostPort: 3210,      // port for the locally hosted server
-	hostRoom: '',        // generated room for the local server
-	hostApiKey: '',      // generated API key for the local server
-	hostToken: '',       // generated room token for the local server
 	license: '',         // Pro license key (unlocks unlimited devices per room)
 };
 
@@ -714,25 +707,15 @@ class PresenceView extends ItemView {
 
 		// ── primary action + share ──────────────────────────────
 		const actions = root.createDiv({ cls: 'unison-actions' });
-		if (p.hostRunning()) {
-			this.button(actions, p.t('hostStop'), () => { p.hostStop(); });
-			this.button(actions, '', () => p.copyConnectionCode(), 'unison-btn-icon', p.t('copyInvite'), 'share-2');
-		} else if (p.connected) {
+		if (p.connected) {
 			this.button(actions, p.t('disconnect'), () => p.disconnect());
 			this.button(actions, '', () => p.copyConnectionCode(), 'unison-btn-icon', p.t('copyInvite'), 'share-2');
-		} else if (p.isLoopbackUrl(p.settings.serverUrl)) {
-			// a local host URL that is not running -> offer to start it again
-			this.button(actions, p.t('hostStart'), () => { p.hostStart(); });
 		} else if (p.settings.serverUrl) {
 			this.button(actions, p.t('connect'), () => p.connect(true));
 			this.button(actions, '', () => p.quickConnect(), 'unison-btn-icon', p.t('joinRoom'), 'log-in');
 		} else {
 			this.button(actions, p.t('createRoom'), () => { p.createRoom(); });
 			this.button(actions, '', () => p.quickConnect(), 'unison-btn-icon', p.t('joinRoom'), 'log-in');
-		}
-
-		if (p.hostRunning()) {
-			root.createDiv({ cls: 'unison-host-info', text: p.t('hostAddr', p.hostShareUrl()) });
 		}
 
 		if (!p.connected) {
@@ -1070,26 +1053,6 @@ class UnisonSettingTab extends PluginSettingTab {
 				.setValue(p.settings.lang || '')
 				.onChange(async v => { p.settings.lang = v; await p.saveSettings(); this.display(); p.refreshPresence(); }));
 
-		if (p.isDesktop()) {
-			new Setting(advBody)
-				.setName(p.t('advancedHost'))
-				.setDesc(p.hostRunning() ? p.t('hostRunning', p.hostShareUrl()) : p.t('hostDesc'))
-				.addButton(b => b
-					.setButtonText(p.hostRunning() ? p.t('hostStop') : p.t('hostStart'))
-					.onClick(async () => {
-						b.setDisabled(true);
-						if (p.hostRunning()) await p.hostStop(); else await p.hostStart();
-						this.display();
-					}));
-			new Setting(advBody)
-				.setName(p.t('hostAutoName'))
-				.setDesc(p.t('hostAutoDesc'))
-				.addToggle(t => t.setValue(!!p.settings.hostEnabled)
-					.onChange(async v => { p.settings.hostEnabled = v; await p.saveSettings(); }));
-		} else {
-			advBody.createEl('p', { cls: 'unison-settings-hint', text: p.t('hostMobile') });
-		}
-
 		// ── guide: host your own server ─────────────────────────
 		const det = advBody.createEl('details', { cls: 'unison-guide' });
 		det.createEl('summary', { text: p.t('guideSummary') });
@@ -1301,11 +1264,7 @@ module.exports = class UnisonPlugin extends Plugin {
 
 	/** Startup: connect, then quietly check whether a newer version exists. */
 	async startup() {
-		if (this.settings.autoConnect) {
-			if (this.settings.hostEnabled && this.isDesktop()) setTimeout(() => this.hostStart(), 800);
-			// a local host URL is only connected when auto-start is on
-			else if (!this.isLoopbackUrl(this.settings.serverUrl)) setTimeout(() => this.connect(), 800);
-		}
+		if (this.settings.autoConnect) setTimeout(() => this.connect(), 800);
 		// let the connection settle, then notify if an update is available
 		setTimeout(() => this.checkForUpdate(false), 8000);
 	}
@@ -1357,8 +1316,6 @@ module.exports = class UnisonPlugin extends Plugin {
 		for (const t of this.debounceTimers.values()) clearTimeout(t);
 		this.debounceTimers.clear();
 		try { if (this.ws && this.ws.readyState === 1) this.ws.close(); } catch (e) { /* ignore */ }
-		try { if (this._host && this._host.server) this._host.server.close(); } catch (e) { /* ignore */ }
-		this._host = null;
 		this.app.workspace.detachLeavesOfType(VIEW_TYPE_PRESENCE);
 	}
 
@@ -1385,7 +1342,7 @@ module.exports = class UnisonPlugin extends Plugin {
 	makeConnectionCode() {
 		const payload = {
 			v: 1,
-			s: this.shareServerUrl(),
+			s: this.settings.serverUrl || '',
 			r: this.settings.room || '',
 			k: this.settings.apiKey || '',
 			t: this.settings.token || '',
@@ -1406,7 +1363,7 @@ module.exports = class UnisonPlugin extends Plugin {
 	}
 
 	copyConnectionCode() {
-		if (!this.shareServerUrl()) { new Notice(this.t('needServerUrl')); return; }
+		if (!this.settings.serverUrl) { new Notice(this.t('needServerUrl')); return; }
 		const code = this.makeConnectionCode();
 		navigator.clipboard.writeText(code).then(() => new Notice(this.t('codeCopied'), 5000), () => new Notice(this.t('inviteFail')));
 	}
@@ -1428,7 +1385,7 @@ module.exports = class UnisonPlugin extends Plugin {
 
 	/** True when the connection is the built-in hosted relay. */
 	usesOfficial() {
-		return this.hostRunning() || this.settings.serverUrl === OFFICIAL_SERVER;
+		return this.settings.serverUrl === OFFICIAL_SERVER;
 	}
 
 	/** Ask the user for a code, apply it and connect. */
@@ -1751,166 +1708,7 @@ module.exports = class UnisonPlugin extends Plugin {
 		}
 	}
 
-	// ---------- host a server on this computer (desktop) ----------
-	/** True on Obsidian desktop (Electron), where we can spawn a local server. */
-	isDesktop() {
-		try { return !!(Platform && (Platform.isDesktopApp || Platform.isDesktop)); } catch (e) { return false; }
-	}
-
-	hostRunning() { return !!(this._host && this._host.running); }
-
-	hostShareUrl() { return (this._host && this._host.shareUrl) || ''; }
-
-	/** True for ws://127.0.0.1 / ws://localhost URLs. */
-	isLoopbackUrl(url) { return /^wss?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(url || ''); }
-
-	/** URL others should use: the hosted LAN address, or the configured server. */
-	shareServerUrl() {
-		if (this.hostRunning()) return this.hostShareUrl();
-		return this.settings.serverUrl || '';
-	}
-
-	/** First non-internal IPv4 address, else loopback. */
-	lanAddress() {
-		try {
-			const os = require('os');
-			const ifaces = os.networkInterfaces();
-			for (const name of Object.keys(ifaces)) {
-				for (const ni of (ifaces[name] || [])) {
-					if (ni && ni.family === 'IPv4' && !ni.internal) return ni.address;
-				}
-			}
-		} catch (e) { /* ignore */ }
-		return '127.0.0.1';
-	}
-
-	/** Absolute path of the plugin folder (Node fs needs an absolute path). */
-	absPluginDir() {
-		try {
-			const path = require('path');
-			let base = '';
-			try { base = (this.app.vault.adapter.getBasePath && this.app.vault.adapter.getBasePath()) || ''; } catch (e) { base = ''; }
-			let rel = (this.manifest && this.manifest.dir) || '';
-			if (!rel) {
-				const cfg = (this.app.vault.configDir || '.obsidian');
-				rel = `${cfg}/plugins/${(this.manifest && this.manifest.id) || 'unison'}`;
-			}
-			if (base && !path.isAbsolute(rel)) return path.join(base, rel);
-			return rel || this.pluginDir();
-		} catch (e) { return this.pluginDir(); }
-	}
-
-	/** Download (once) the dependency-free server next to the plugin. */
-	async ensureHostScript() {
-		const fs = require('fs');
-		const path = require('path');
-		const target = path.join(this.absPluginDir(), 'unison-host.cjs');
-		let ok = false;
-		try { const st = fs.statSync(target); ok = !!(st && st.size > 1000); } catch (e) { ok = false; }
-		if (!ok) {
-			const r = await requestUrl({ url: HOST_SERVER_URL, throw: false, headers: { 'Cache-Control': 'no-cache' } });
-			if (!r || r.status !== 200 || typeof r.text !== 'string' || r.text.length < 1000) {
-				throw new Error('download failed');
-			}
-			await fs.promises.writeFile(target, r.text, 'utf8');
-		}
-		return target;
-	}
-
-	/** Load the server file as a CommonJS module and return its exports. */
-	loadHostModule(scriptPath) {
-		try {
-			try { delete require.cache[require.resolve(scriptPath)]; } catch (e) { /* ignore */ }
-			const m = require(scriptPath);
-			if (m && typeof m.createServer === 'function') return m;
-		} catch (e) { /* fall back to evaluating the source below */ }
-		const fs = require('fs');
-		const path = require('path');
-		const source = fs.readFileSync(scriptPath, 'utf8');
-		const mod = { exports: {} };
-		const fn = new Function('module', 'exports', 'require', '__dirname', '__filename', source);
-		fn(mod, mod.exports, require, path.dirname(scriptPath), scriptPath);
-		return mod.exports;
-	}
-
-	/** Start the sync server locally and point the plugin at it. */
-	async hostStart() {
-		if (!this.isDesktop()) { new Notice(this.t('hostMobile')); return false; }
-		if (this.hostRunning()) return true;
-		let createServer;
-		try {
-			const script = await this.ensureHostScript();
-			const mod = this.loadHostModule(script);
-			createServer = mod && mod.createServer;
-			if (typeof createServer !== 'function') throw new Error('bad server module');
-		} catch (e) {
-			new Notice(this.t('hostFailed', (e && e.message) || String(e)), 9000);
-			this.log('host failed: ' + ((e && e.message) || e));
-			return false;
-		}
-
-		const fs = require('fs');
-		const path = require('path');
-		const dataDir = path.join(this.absPluginDir(), 'host-data');
-		try { fs.mkdirSync(dataDir, { recursive: true }); } catch (e) { /* ignore */ }
-
-		if (!this.settings.hostRoom) this.settings.hostRoom = 'unison-' + genId().slice(0, 6);
-		if (!this.settings.hostApiKey) this.settings.hostApiKey = 'uk' + genId() + genId();
-		if (!this.settings.hostToken) this.settings.hostToken = 'rt' + genId() + genId();
-		await this.saveSettings();
-
-		const basePort = this.settings.hostPort || 3210;
-		let server = null, port = 0, lastErr = null;
-		for (let i = 0; i < 10; i++) {
-			const tryPort = basePort + i;
-			try {
-				server = createServer({
-					port: tryPort, host: '0.0.0.0', dataDir, pluginDir: this.absPluginDir(),
-					apiKey: this.settings.hostApiKey, roomToken: this.settings.hostToken, logLevel: 'warn',
-				});
-				await server.listen(tryPort, '0.0.0.0');
-				port = tryPort;
-				break;
-			} catch (e) {
-				lastErr = e;
-				try { if (server) await server.close(); } catch (e2) { /* ignore */ }
-				server = null;
-			}
-		}
-		if (!server) {
-			const detail = (lastErr && lastErr.message) || 'could not bind a port';
-			new Notice(this.t('hostFailed', detail), 10000);
-			this.log('host failed: ' + detail);
-			return false;
-		}
-
-		this._host = { server, port, running: true, shareUrl: `ws://${this.lanAddress()}:${port}`, dataDir };
-		this.log(`host: listening on 0.0.0.0:${port} (in-process)`);
-
-		this.settings.hostPort = port;
-		this.settings.serverUrl = `ws://127.0.0.1:${port}`;
-		this.settings.room = this.settings.hostRoom;
-		this.settings.apiKey = this.settings.hostApiKey;
-		this.settings.token = this.settings.hostToken;
-		await this.saveSettings();
-
-		this.disconnect(true);
-		this.connect(true);
-		new Notice(this.t('hostStarted', this._host.shareUrl), 10000);
-		this.refreshPresence();
-		return true;
-	}
-
-	async hostStop() {
-		const h = this._host;
-		this._host = null;
-		if (h && h.server) { try { await h.server.close(); } catch (e) { /* ignore */ } }
-		this.settings.hostEnabled = false;
-		await this.saveSettings();
-		this.disconnect(true);
-		new Notice(this.t('hostStopped'), 4000);
-		this.refreshPresence();
-	}
+	// Self-hosting: run server/server.js on a machine (see docs/server-setup.md).
 
 	// ---------- connection ----------
 	connect(manual) {

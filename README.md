@@ -22,11 +22,10 @@ version history. It runs on Obsidian desktop (Windows, macOS, Linux) and mobile
   of them from the command palette.
 - **Scope control** - whole vault or selected folders, optional text-only mode,
   exclude patterns.
-- **Quick connect** - share server, room and keys as one paste-able code.
-- **Host on your computer** - on desktop, start the sync server with one click
-  and send a friend a single code; no terminal, no separate install. The friend
-  just pastes the code.
+- **Quick connect** - share server, room and key as one paste-able code.
 - **Self-update** - installs new versions from GitHub releases.
+- **Self-hosting** - run `server/server.js` on any machine and point the plugin
+  at it (see [`docs/server-setup.md`](docs/server-setup.md)).
 
 ## Install the plugin
 
