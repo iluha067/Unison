@@ -32,8 +32,8 @@ root and download the matching release assets (`manifest.json`, `main.js`,
 4. Commit, push to `main`, then push a tag equal to the new version:
 
    ```bash
-   git tag 3.0.1
-   git push origin 3.0.1
+   git tag 3.0.3
+   git push origin 3.0.3
    ```
 
 The `Release` workflow builds a GitHub release with the three plugin files, and

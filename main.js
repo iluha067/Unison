@@ -1,5 +1,5 @@
 /*
- * Unison v3.0.0 - collaborative real-time vault sync (text + binary) + people panel.
+ * Unison v3.0.2 - collaborative real-time vault sync (text + binary) + people panel.
  *
  *  - ALL files sync: text as UTF-8, binary (png/jpg/pdf/mp3/...) as base64.
  *    .obsidian and .trash never sync - layouts would fight.
@@ -1114,7 +1114,7 @@ module.exports = class UnisonPlugin extends Plugin {
 
 		// Connect first; the update check only notifies (never auto-installs).
 		this.startup();
-		this.log('plugin loaded v' + ((this.manifest && this.manifest.version) || '3.0.0'));
+		this.log('plugin loaded v' + ((this.manifest && this.manifest.version) || '3.0.2'));
 	}
 
 	/** Startup: connect, then quietly check whether a newer version exists. */

@@ -172,7 +172,7 @@ systemctl enable --now unison
 systemctl status unison --no-pager
 
 curl -s http://127.0.0.1:3000/health
-# {"ok":true,"service":"unison","version":"3.0.0","authRequired":true,...}
+# {"ok":true,"service":"unison","version":"3.0.2","authRequired":true,...}
 
 journalctl -u unison -n 20 --no-pager
 ```
