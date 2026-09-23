@@ -1209,7 +1209,8 @@ module.exports = class UnisonPlugin extends Plugin {
 	async startup() {
 		if (this.settings.autoConnect) {
 			if (this.settings.hostEnabled && this.isDesktop()) setTimeout(() => this.hostStart(), 800);
-			else setTimeout(() => this.connect(), 800);
+			// a local host URL is only connected when auto-start is on
+			else if (!this.isLoopbackUrl(this.settings.serverUrl)) setTimeout(() => this.connect(), 800);
 		}
 		// let the connection settle, then notify if an update is available
 		setTimeout(() => this.checkForUpdate(false), 8000);
@@ -1646,6 +1647,9 @@ module.exports = class UnisonPlugin extends Plugin {
 
 	hostShareUrl() { return (this._host && this._host.shareUrl) || ''; }
 
+	/** True for ws://127.0.0.1 / ws://localhost URLs. */
+	isLoopbackUrl(url) { return /^wss?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(url || ''); }
+
 	/** URL others should use: the hosted LAN address, or the configured server. */
 	shareServerUrl() {
 		if (this.hostRunning()) return this.hostShareUrl();
@@ -1769,7 +1773,7 @@ module.exports = class UnisonPlugin extends Plugin {
 		this._host = { server, port, running: true, shareUrl: `ws://${this.lanAddress()}:${port}`, dataDir };
 		this.log(`host: listening on 0.0.0.0:${port} (in-process)`);
 
-		this.settings.hostEnabled = true;
+		this.settings.hostPort = port;
 		this.settings.serverUrl = `ws://127.0.0.1:${port}`;
 		this.settings.room = this.settings.hostRoom;
 		this.settings.apiKey = this.settings.hostApiKey;

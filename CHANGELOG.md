@@ -4,7 +4,7 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
-## [3.1.2] - 2026-09-23
+## [3.1.3] - 2026-09-23
 
 Unison (formerly UnisonSync / Realtime Sync): real-time collaborative vault
 sync over a self-hosted WebSocket server.
@@ -26,6 +26,8 @@ sync over a self-hosted WebSocket server.
 
 ### Changed
 
+- "Start on launch" is off by default, and starting the server manually no
+  longer turns it on. Auto-start only happens when you enable the toggle.
 - The server is now a single file with **zero dependencies** (its own minimal
   WebSocket implementation), so hosting needs nothing but Node.js.
 - The sidebar is reduced to one primary action plus a share button; scope,
