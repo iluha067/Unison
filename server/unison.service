@@ -1,0 +1,29 @@
+[Unit]
+Description=Unison sync server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/unison
+ExecStart=/usr/bin/node /opt/unison/server.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=DATA_DIR=/opt/unison/data
+Environment=PLUGIN_DIR=/opt/unison/plugin
+Environment=LOG_LEVEL=info
+# Always set a strong key in production:
+# Environment=API_KEY=change-me-to-a-long-random-string
+# Environment=ROOM_TOKEN=optional-second-factor
+User=unison
+Group=unison
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/unison/data
+
+[Install]
+WantedBy=multi-user.target

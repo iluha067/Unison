@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# server runtime data (rooms + history) — never commit vault content
+server/data/
+data/
+
+# local config / secrets
+.env
+*.local
+
+# logs & OS cruft
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editor
+.vscode/
+.idea/
+*.swp

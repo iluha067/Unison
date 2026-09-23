@@ -1,0 +1,19 @@
+{
+  "name": "unison-server",
+  "version": "3.0.0",
+  "description": "WebSocket sync server for the Unison Obsidian plugin",
+  "main": "server.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18"
+  }
+}

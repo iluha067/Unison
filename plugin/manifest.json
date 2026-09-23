@@ -1,0 +1,10 @@
+{
+	"id": "unison",
+	"name": "Unison",
+	"version": "3.0.0",
+	"minAppVersion": "1.4.0",
+	"description": "Real-time collaborative vault sync: live multi-user editing with three-way merge, file history, folder scope, presence and quick connect.",
+	"author": "Bredatens",
+	"authorUrl": "https://github.com/iluha067",
+	"isDesktopOnly": false
+}
