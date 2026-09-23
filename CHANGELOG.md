@@ -20,8 +20,8 @@ Rebrand of "UnisonSync" to **Unison** plus a security and reliability pass.
 
 ### Added
 
-- **Private-repo updates**: a token field in settings switches downloads to the
-  GitHub Contents API (`docs/private-updates.md`).
+- **Private-repo updates** (optional): a token field in settings switches
+  downloads to the GitHub Contents API (`docs/updates.md`).
 - Server: `GET /rooms` and `GET /metrics` (Prometheus text format).
 - Server: graceful shutdown on `SIGINT`/`SIGTERM`, flushing pending writes.
 - Server: idle-room unloading from memory (files remain on disk).
@@ -30,8 +30,8 @@ Rebrand of "UnisonSync" to **Unison** plus a security and reliability pass.
 - Server: configurable CORS for plugin hosting (no more hard-coded `*`).
 - Server: structured logging with `LOG_LEVEL` and `X-Content-Type-Options`.
 - Unit tests: 13 server tests (`node --test` + `ws`) and 8 plugin merge tests.
-- Documentation: `README`, `docs/protocol.md`, `docs/self-hosting.md`,
-  `docs/private-updates.md`, `SECURITY.md`, `CHANGELOG.md`.
+- Documentation: `README`, `docs/protocol.md`, `docs/server-setup.md`,
+  `docs/updates.md`, `SECURITY.md`, `CHANGELOG.md`.
 
 ### Security
 
