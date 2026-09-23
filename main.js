@@ -1025,6 +1025,7 @@ module.exports = class UnisonPlugin extends Plugin {
 		this.lastError = '';
 		this.lastMsgAt = 0;
 		this.didInitialSync = false;
+		this._fullSyncPending = false;
 		this.syncBusy = false;
 		this.syncProgress = null; // {done, total} during first sync
 		this.lastSyncAt = 0;
@@ -1682,6 +1683,7 @@ module.exports = class UnisonPlugin extends Plugin {
 	requestFullSync() {
 		if (!this.connected) { new Notice(this.t('noConnection')); return; }
 		if (this.syncBusy) return;
+		this._fullSyncPending = true;
 		this.send({ type: 'list', clientId: this.clientId });
 	}
 
@@ -1855,7 +1857,14 @@ module.exports = class UnisonPlugin extends Plugin {
 	async handleMessage(msg) {
 		switch (msg.type) {
 			case 'welcome': return this.onWelcome(msg);
-			case 'file-list': return this.reconcile(msg.files || [], true, true);
+			case 'file-list': {
+				// Only the very first index (or an explicit "Full sync") is a full
+				// reconcile. Periodic list responses are deltas, otherwise every
+				// sweep would merge the file against the server while typing.
+				const first = !this.didInitialSync || this._fullSyncPending;
+				this._fullSyncPending = false;
+				return this.reconcile(msg.files || [], first, true);
+			}
 			case 'user-join': return this.onUserJoin(msg);
 			case 'user-leave': return this.onUserLeave(msg);
 			case 'presence': return this.onPresence(msg);
