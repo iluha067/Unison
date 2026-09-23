@@ -4,11 +4,17 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
-## [3.2.0] - 2026-09-23
+## [3.3.0] - 2026-09-23
 
 Unison: real-time collaborative vault sync over a hosted WebSocket server.
 
 ### Features
+
+- **Per-room keys**: every new room gets its own generated key. Creating a room
+  fills in the server, room and key, and the invite code carries all of them, so
+  a fresh room starts empty and only people with the code can join.
+- **Plans as cards** in settings: Free and Pro side by side.
+- **Create rooms from mobile** too (rooms run on the hosted server).
 
 - **Rooms on the public Unison server**: "Create a room" starts a room on the
   hosted relay and shares one code, so people can join from anywhere.
@@ -29,6 +35,10 @@ Unison: real-time collaborative vault sync over a hosted WebSocket server.
 
 ### Changed
 
+- The settings tab is reorganized into Room, Plan, Profile, Sync, Updates and a
+  collapsible Advanced section.
+- The public server no longer needs a global API key: rooms are protected by
+  their own per-room keys.
 - The sidebar is reduced to one primary action plus a share button; scope,
   sync mode, name and color moved into settings.
 - "Start on launch" is off by default, and starting the server manually no

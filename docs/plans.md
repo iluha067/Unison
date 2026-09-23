@@ -13,7 +13,8 @@ for a room, for as long as the license is valid.
 ## How it works
 
 - Rooms run on the public Unison server. A room is identified by a random name
-  (`unison-xxxxxxxxxx`), which is the secret shared in the invite code.
+  (`unison-xxxxxxxxxx`) plus a per-room key; both are shared in the invite code,
+  and a newly created room starts empty.
 - A **Pro license key** is a signed token: `UNISON-<payload>.<signature>`.
 - The server verifies the signature offline with its `LICENSE_SECRET` (no
   database, no callbacks) and upgrades that room to Pro.

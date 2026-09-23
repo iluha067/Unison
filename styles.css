@@ -237,6 +237,73 @@
 	word-break: break-all;
 }
 
+/* ── settings layout ─────────────────────────────────────── */
+.unison-set-h3 {
+	margin: 22px 0 4px;
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+.unison-settings .setting-item { border-top: none; }
+
+/* ── plan cards ──────────────────────────────────────────── */
+.unison-cards {
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin: 8px 0 6px;
+}
+.unison-card {
+	position: relative;
+	flex: 1 1 180px;
+	min-width: 160px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 14px 16px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 14px;
+	background: var(--background-primary);
+	transition: border-color .12s ease, box-shadow .12s ease;
+}
+.unison-card.is-active {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 1px var(--interactive-accent) inset;
+}
+.unison-card-pro {
+	background: linear-gradient(160deg, var(--background-secondary), var(--background-primary));
+}
+.unison-card-title { font-weight: 700; font-size: 14px; }
+.unison-card-price { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.unison-card-price-sub { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.unison-card-desc { font-size: 12px; color: var(--text-muted); line-height: 1.35; }
+.unison-card-badge {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: .05em;
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+	border-radius: 999px;
+	padding: 2px 8px;
+}
+.unison-card-btn { margin-top: 4px; }
+.unison-card-input {
+	width: 100%;
+	margin-top: 4px;
+	font-family: var(--font-monospace);
+	font-size: 11.5px;
+}
+
+/* sidebar pro badge */
+.unison-version.unison-pro {
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+}
+
 /* ── remote cursor overwrites (never touches note text) ─── */
 .unison-flag {
 	position: absolute;

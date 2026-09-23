@@ -739,12 +739,39 @@ function createServer(overrides = {}) {
         const st = getRoom(room);
         touchRoom(room);
 
-        // Pro license upgrades this room to an unlimited plan.
+        // Per-room keys + Pro licenses.
         const lic = verifyLicense(msg.license, cfg.licenseSecret);
-        if (lic) {
-          registry[room] = { plan: 'pro', exp: lic.exp || 0, licenseId: lic.id || '' };
+        const entry = registry[room];
+
+        if (msg.create) {
+          if (entry && entry.key) {
+            send(ws, { type: 'error', message: 'room already exists' });
+            ws.close(1008, 'room exists');
+            return;
+          }
+          registry[room] = {
+            key: typeof msg.token === 'string' ? msg.token : '',
+            plan: lic ? 'pro' : 'free',
+            exp: lic ? (lic.exp || 0) : 0,
+            licenseId: lic ? (lic.id || '') : '',
+            createdAt: Date.now(),
+          };
           saveRegistry();
+        } else {
+          if (entry && entry.key && !safeEqual(msg.token, entry.key)) {
+            send(ws, { type: 'error', message: 'invalid room key' });
+            ws.close(1008, 'bad room key');
+            return;
+          }
+          if (lic) {
+            registry[room] = Object.assign({}, entry || {}, {
+              key: (entry && entry.key) || (typeof msg.token === 'string' ? msg.token : ''),
+              plan: 'pro', exp: lic.exp || 0, licenseId: lic.id || '',
+            });
+            saveRegistry();
+          }
         }
+
         const plan = roomPlanOf(room);
         const limit = plan === 'pro' ? cfg.proMaxClients : cfg.maxClientsPerRoom;
         st.plan = plan;

@@ -11,7 +11,7 @@ A client must send `hello` first; any other message before that is answered with
 
 | type | fields | notes |
 | --- | --- | --- |
-| `hello` | `room`, `user`, `clientId`, `color`, `token`, `apiKey`, `license?`, `files?`, `device?` | Join a room. `apiKey` must match the server when auth is on; `license` is an optional Pro key. |
+| `hello` | `room`, `user`, `clientId`, `color`, `token`, `apiKey`, `license?`, `create?`, `files?`, `device?` | Join a room. `apiKey` must match the server when auth is on; `token` is the per-room key; `license` is an optional Pro key; `create:true` registers a new room with `token` as its key. |
 | `ping` | `t` | Latency probe. |
 | `list` | - | Ask for the full server file index. |
 | `file-update` | `path`, `content`, `encoding`, `mtime?` | `encoding` is `utf8` (default) or `base64`. |

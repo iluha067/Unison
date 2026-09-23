@@ -224,6 +224,9 @@ const I18N = {
 		planBuyHint: 'After payment you receive a license key; paste it below.',
 		planThanks: 'Pro activated. Thanks!',
 		planFreeActive: 'You are on the Free plan.',
+		profileSection: 'Profile',
+		planPerMonth: 'per month',
+		planCurrentBadge: 'Current',
 		inviteFail: 'Could not copy',
 		inviteText: 'Server: {server}\nRoom: {room}\nInstall Unison and enter these. Pick a unique name!',
 		invite: 'Copy invite',
@@ -382,6 +385,9 @@ const I18N = {
 		planBuyHint: 'После оплаты ключ придёт на почту; вставьте его ниже.',
 		planThanks: 'Pro активирован. Спасибо!',
 		planFreeActive: 'У вас бесплатный тариф.',
+		profileSection: 'Профиль',
+		planPerMonth: 'в месяц',
+		planCurrentBadge: 'Текущий',
 		inviteFail: 'Не удалось скопировать',
 		inviteText: 'Сервер: {server}\nКомната: {room}\nПоставь плагин Unison и введи эти данные. Имя выбери уникальное!',
 		invite: 'Скопировать приглашение',
@@ -688,6 +694,7 @@ class PresenceView extends ItemView {
 		title.createSpan({ cls: 'unison-dot' + (p.connected ? ' online' : '') });
 		title.createSpan({ text: p.connected ? p.settings.room : p.t('notConnected'), cls: 'unison-head-name' });
 		title.createSpan({ cls: 'unison-version', text: 'v' + ((p.manifest && p.manifest.version) || '?') });
+		if (p.roomPlan === 'pro') title.createSpan({ cls: 'unison-version unison-pro', text: 'PRO' });
 
 		const meta = head.createDiv({ cls: 'unison-head-meta' });
 		if (p.connected) {
@@ -886,43 +893,12 @@ class UnisonSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		const p = this.plugin;
 		containerEl.empty();
+		containerEl.addClass('unison-settings');
+
 		containerEl.createEl('h2', { text: 'Unison' });
-		containerEl.createDiv({ cls: 'unison-settings-hint' })
-			.setText(p.t('tabHint'));
+		containerEl.createDiv({ cls: 'unison-settings-hint', text: p.t('tabHint') });
 
-		new Setting(containerEl)
-			.setName(p.t('langLabel'))
-			.setDesc(p.t('langDesc'))
-			.addDropdown(d => d
-				.addOption('', 'Auto')
-				.addOption('en', 'English')
-				.addOption('ru', 'Русский')
-				.setValue(p.settings.lang || '')
-				.onChange(async v => { p.settings.lang = v; await p.saveSettings(); this.display(); p.refreshPresence(); }));
-
-		// ── profile: name & color (shown to other participants) ─
-		new Setting(containerEl)
-			.setName(p.t('name'))
-			.setDesc(p.t('nameDesc'))
-			.addText(t => t
-				.setPlaceholder(randomName())
-				.setValue(p.settings.user || '')
-				.onChange(async v => {
-					p.settings.user = (v || '').trim() || randomName();
-					p.onProfileChanged();
-					await p.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName(p.t('color'))
-			.setDesc(p.t('colorDesc'))
-			.addColorPicker(c => c
-				.setValue(normalizeHex(p.settings.userColor) || normalizeHex(colorFor(p.settings.user)) || '#2196f3')
-				.onChange(async v => {
-					p.settings.userColor = normalizeHex(v) || v;
-					p.onProfileChanged();
-					await p.saveSettings();
-				}));
+		const h3 = (t) => containerEl.createEl('h3', { cls: 'unison-set-h3', text: t });
 
 		/**
 		 * Text fields must apply every keystroke, an instant Ctrl+V paste and
@@ -942,101 +918,28 @@ class UnisonSettingTab extends PluginSettingTab {
 					for (const ev of ['input', 'paste', 'cut', 'keyup', 'drop']) {
 						el.addEventListener(ev, () => setTimeout(sync, 0));
 					}
-					// also catch programmatic/IME changes
 					el.addEventListener('change', sync);
 				} catch (e) { /* ignore */ }
 			});
 			return setting;
 		};
 
-		// ── host (desktop) ─────────────────────────────────────
-		if (p.isDesktop()) {
-			containerEl.createEl('h3', { text: p.t('hostSection') });
-			new Setting(containerEl)
-				.setName(p.t('hostName'))
-				.setDesc(p.hostRunning() ? p.t('hostRunning', p.hostShareUrl()) : p.t('hostDesc'))
-				.addButton(b => b
-					.setButtonText(p.hostRunning() ? p.t('hostStop') : p.t('hostStart'))
-					.setCta()
-					.onClick(async () => {
-						b.setDisabled(true);
-						if (p.hostRunning()) await p.hostStop(); else await p.hostStart();
-						this.display();
-					}));
-			if (p.hostRunning()) {
-				new Setting(containerEl)
-					.setName(p.t('hostInviteName'))
-					.setDesc(p.t('hostInviteDesc'))
-					.addButton(b => b.setButtonText(p.t('copyInvite')).onClick(() => p.copyConnectionCode()));
-			}
-			new Setting(containerEl)
-				.setName(p.t('hostAutoName'))
-				.setDesc(p.t('hostAutoDesc'))
-				.addToggle(t => t.setValue(!!p.settings.hostEnabled)
-					.onChange(async v => { p.settings.hostEnabled = v; await p.saveSettings(); }));
-		} else {
-			containerEl.createEl('p', { cls: 'unison-settings-hint', text: p.t('hostMobile') });
-		}
-
-		// ── plan ───────────────────────────────────────────────
-		containerEl.createEl('h3', { text: p.t('planSection') });
+		// ── room ───────────────────────────────────────────────
+		h3(p.t('roomSection'));
 		new Setting(containerEl)
-			.setName(p.roomPlan === 'pro' ? p.t('planPro') : p.t('planFree'))
-			.setDesc(p.roomPlan === 'pro' ? p.t('planProDesc') : p.t('planFreeDesc'));
+			.setName(p.t('createRoom'))
+			.setDesc(p.t('createRoomDesc'))
+			.addButton(b => b.setCta().setButtonText(p.t('createRoom')).onClick(async () => { await p.createRoom(); this.display(); }))
+			.addButton(b => b.setButtonText(p.t('joinRoom')).onClick(() => p.quickConnect()));
 		new Setting(containerEl)
-			.setName(p.t('planLicenseName'))
-			.setDesc(p.t('planLicenseDesc'))
-			.addText(t => t
-				.setPlaceholder('UNISON-...')
-				.setValue(p.settings.license || '')
-				.onChange(async v => {
-					p.settings.license = (v || '').trim();
-					await p.saveSettings();
-					if (p.connected) { p.disconnect(true); p.connect(true); }
-				}));
-		new Setting(containerEl)
-			.setName(p.t('planBuy'))
-			.setDesc(p.t('planBuyHint'))
-			.addButton(b => b.setCta().setButtonText(p.t('planBuy')).onClick(() => {
-				try { window.open(BUY_URL, '_blank'); } catch (e) { /* ignore */ }
-			}));
-
-		// ── connection ─────────────────────────────────────────
-		containerEl.createEl('h3', { text: p.t('connSection') });
-		bindText(new Setting(containerEl)
-			.setName(p.t('serverName'))
-			.setDesc(p.t('serverDesc')),
-			() => p.settings.serverUrl,
-			async v => { p.settings.serverUrl = v; await p.saveSettings(); },
-			{ placeholder: 'ws://host:3000' });
-
-		bindText(new Setting(containerEl)
-			.setName(p.t('apiKeyName'))
-			.setDesc(p.t('apiKeyDesc')),
-			() => p.settings.apiKey,
-			async v => { p.settings.apiKey = v; await p.saveSettings(); },
-			{ placeholder: 'key', password: true });
-
-		bindText(new Setting(containerEl)
-			.setName(p.t('roomName'))
-			.setDesc(p.t('roomDesc')),
-			() => p.settings.room,
-			async v => { p.settings.room = v || 'default'; await p.saveSettings(); },
-			{ placeholder: 'my-room' });
-
-		bindText(new Setting(containerEl)
-			.setName(p.t('tokenName'))
-			.setDesc(p.t('tokenDesc')),
-			() => p.settings.token,
-			async v => { p.settings.token = v; await p.saveSettings(); },
-			{ placeholder: '' });
-
+			.setName(p.t('shareRoom'))
+			.setDesc(p.t('shareRoomDesc'))
+			.addButton(b => b.setButtonText(p.t('copyInvite')).onClick(() => p.copyConnectionCode()));
 		new Setting(containerEl)
 			.setName(p.t('autoConnectName'))
 			.setDesc(p.t('autoConnectDesc'))
 			.addToggle(t => t.setValue(p.settings.autoConnect !== false)
 				.onChange(async v => { p.settings.autoConnect = v; await p.saveSettings(); }));
-
 		new Setting(containerEl)
 			.setName(p.t('connectToggle'))
 			.addButton(b => b.setButtonText(p.connected ? p.t('disconnect') : p.t('connect')).onClick(() => {
@@ -1044,14 +947,61 @@ class UnisonSettingTab extends PluginSettingTab {
 				this.display();
 			}));
 
+		// ── plan (cards) ───────────────────────────────────────
+		h3(p.t('planSection'));
+		const cards = containerEl.createDiv({ cls: 'unison-cards' });
+
+		const free = cards.createDiv({ cls: 'unison-card' + (p.roomPlan !== 'pro' ? ' is-active' : '') });
+		free.createDiv({ cls: 'unison-card-title', text: p.t('planFree') });
+		free.createDiv({ cls: 'unison-card-price', text: '$0' });
+		free.createDiv({ cls: 'unison-card-desc', text: p.t('planFreeDesc') });
+		if (p.roomPlan !== 'pro') free.createSpan({ cls: 'unison-card-badge', text: p.t('planCurrentBadge') });
+
+		const pro = cards.createDiv({ cls: 'unison-card unison-card-pro' + (p.roomPlan === 'pro' ? ' is-active' : '') });
+		pro.createDiv({ cls: 'unison-card-title', text: p.t('planPro') });
+		const price = pro.createDiv({ cls: 'unison-card-price' });
+		price.createSpan({ text: '$3' });
+		price.createSpan({ cls: 'unison-card-price-sub', text: ' ' + p.t('planPerMonth') });
+		pro.createDiv({ cls: 'unison-card-desc', text: p.t('planProDesc') });
+		if (p.roomPlan === 'pro') pro.createSpan({ cls: 'unison-card-badge', text: p.t('planCurrentBadge') });
+		const buy = pro.createEl('button', { cls: 'mod-cta unison-btn unison-card-btn', text: p.t('planBuy') });
+		buy.onclick = () => { try { window.open(BUY_URL, '_blank'); } catch (e) { /* ignore */ } };
+		const lic = pro.createEl('input', { cls: 'unison-card-input', type: 'text', placeholder: 'UNISON-...' });
+		lic.value = p.settings.license || '';
+		const applyLic = async () => {
+			p.settings.license = (lic.value || '').trim();
+			await p.saveSettings();
+			if (p.connected) { p.disconnect(true); p.connect(true); }
+		};
+		lic.onchange = applyLic;
+		lic.onblur = applyLic;
+
+		// ── profile ────────────────────────────────────────────
+		h3(p.t('profileSection'));
 		new Setting(containerEl)
-			.setName(p.t('copyCodeName'))
-			.setDesc(p.t('copyCodeDesc'))
-			.addButton(b => b.setButtonText(p.t('copyCodeName')).onClick(() => p.copyConnectionCode()))
-			.addButton(b => b.setButtonText(p.t('quickTitle')).onClick(() => p.quickConnect()));
+			.setName(p.t('name'))
+			.setDesc(p.t('nameDesc'))
+			.addText(t => t
+				.setPlaceholder(randomName())
+				.setValue(p.settings.user || '')
+				.onChange(async v => {
+					p.settings.user = (v || '').trim() || randomName();
+					p.onProfileChanged();
+					await p.saveSettings();
+				}));
+		new Setting(containerEl)
+			.setName(p.t('color'))
+			.setDesc(p.t('colorDesc'))
+			.addColorPicker(c => c
+				.setValue(normalizeHex(p.settings.userColor) || normalizeHex(colorFor(p.settings.user)) || '#2196f3')
+				.onChange(async v => {
+					p.settings.userColor = normalizeHex(v) || v;
+					p.onProfileChanged();
+					await p.saveSettings();
+				}));
 
 		// ── sync ───────────────────────────────────────────────
-		containerEl.createEl('h3', { text: p.t('syncSection') });
+		h3(p.t('syncSection'));
 		const scopeDesc = (p.settings.scopeMode === 'folders')
 			? p.t('scopeFolders', (p.settings.syncFolders || []).length)
 			: p.t('scopeAll');
@@ -1068,39 +1018,91 @@ class UnisonSettingTab extends PluginSettingTab {
 				.onChange(async v => { p.settings.syncMode = v; await p.saveSettings(); p.requestFullSync(); }));
 
 		// ── updates ────────────────────────────────────────────
-		containerEl.createEl('h3', { text: p.t('updateSection') });
+		h3(p.t('updateSection'));
 		new Setting(containerEl)
 			.setName(p.t('updateName'))
 			.setDesc(p.t('updateDesc'))
 			.addButton(b => b.setButtonText(p.t('checkUpdate')).onClick(() => p.checkForUpdate(true)));
 
+		// ── advanced ───────────────────────────────────────────
+		const adv = containerEl.createEl('details', { cls: 'unison-guide' });
+		adv.createEl('summary', { text: p.t('advanced') });
+		const advBody = adv.createDiv({ cls: 'unison-guide-body' });
+
+		bindText(new Setting(advBody)
+			.setName(p.t('serverName'))
+			.setDesc(p.t('serverDesc')),
+			() => p.settings.serverUrl,
+			async v => { p.settings.serverUrl = v; await p.saveSettings(); },
+			{ placeholder: 'ws://host:3000' });
+		bindText(new Setting(advBody)
+			.setName(p.t('apiKeyName'))
+			.setDesc(p.t('apiKeyDesc')),
+			() => p.settings.apiKey,
+			async v => { p.settings.apiKey = v; await p.saveSettings(); },
+			{ placeholder: 'key', password: true });
+		bindText(new Setting(advBody)
+			.setName(p.t('roomName'))
+			.setDesc(p.t('roomDesc')),
+			() => p.settings.room,
+			async v => { p.settings.room = v || 'default'; await p.saveSettings(); },
+			{ placeholder: 'my-room' });
+		bindText(new Setting(advBody)
+			.setName(p.t('tokenName'))
+			.setDesc(p.t('tokenDesc')),
+			() => p.settings.token,
+			async v => { p.settings.token = v; await p.saveSettings(); },
+			{ placeholder: '' });
+		new Setting(advBody)
+			.setName(p.t('langLabel'))
+			.setDesc(p.t('langDesc'))
+			.addDropdown(d => d
+				.addOption('', 'Auto')
+				.addOption('en', 'English')
+				.addOption('ru', 'Русский')
+				.setValue(p.settings.lang || '')
+				.onChange(async v => { p.settings.lang = v; await p.saveSettings(); this.display(); p.refreshPresence(); }));
+
+		if (p.isDesktop()) {
+			new Setting(advBody)
+				.setName(p.t('advancedHost'))
+				.setDesc(p.hostRunning() ? p.t('hostRunning', p.hostShareUrl()) : p.t('hostDesc'))
+				.addButton(b => b
+					.setButtonText(p.hostRunning() ? p.t('hostStop') : p.t('hostStart'))
+					.onClick(async () => {
+						b.setDisabled(true);
+						if (p.hostRunning()) await p.hostStop(); else await p.hostStart();
+						this.display();
+					}));
+			new Setting(advBody)
+				.setName(p.t('hostAutoName'))
+				.setDesc(p.t('hostAutoDesc'))
+				.addToggle(t => t.setValue(!!p.settings.hostEnabled)
+					.onChange(async v => { p.settings.hostEnabled = v; await p.saveSettings(); }));
+		} else {
+			advBody.createEl('p', { cls: 'unison-settings-hint', text: p.t('hostMobile') });
+		}
+
 		// ── guide: host your own server ─────────────────────────
-		const det = containerEl.createEl('details', { cls: 'unison-guide' });
+		const det = advBody.createEl('details', { cls: 'unison-guide' });
 		det.createEl('summary', { text: p.t('guideSummary') });
 		const body = det.createDiv({ cls: 'unison-guide-body' });
 		body.createEl('p', { text: p.t('guideHint') });
 		const pre = body.createEl('pre', { cls: 'unison-status-pre' });
 		pre.setText([
 			'# 1. On the server (Ubuntu/Debian), Node.js 18+',
-			'apt-get install -y nodejs npm git',
+			'apt-get install -y nodejs git',
 			'',
-			'# 2. Create folder and files',
+			'# 2. Copy server.js (see the GitHub repo) and run it',
 			'mkdir -p /opt/unison && cd /opt/unison',
-			'#   server.js  - server file (see the GitHub repo)',
-			'#   (no dependencies - nothing to install)',
+			'PORT=3000 DATA_DIR=/opt/unison/data node server.js',
 			'',
-			'# 3. Run with an access key',
-			'API_KEY="your-secret-key" ROOM_TOKEN="room-password" \\',
-			'  PORT=3000 DATA_DIR=/opt/unison/data \\',
-			'  node server.js',
-			'',
-			'# 4. Open the port (ufw example)',
+			'# 3. Open the port (ufw example)',
 			'ufw allow 3000/tcp',
 			'',
-			'# 5. In the plugin settings enter:',
-			'#   Server:  ws://your-server-ip:3000',
-			'#   API key: your-secret-key',
-			'#   Room:    room-password (same for everyone)',
+			'# 4. In the plugin settings enter:',
+			'#   Server: ws://your-server-ip:3000',
+			'#   Room:   any shared name',
 		].join('\n'));
 		body.createEl('p', { cls: 'unison-settings-hint', text: p.t('guideFooter') });
 	}
@@ -1197,6 +1199,7 @@ module.exports = class UnisonPlugin extends Plugin {
 		this._fullSyncPending = false;
 		this.roomLimit = 5;
 		this.roomPlan = 'free';
+		this._createPending = false;
 		this.syncBusy = false;
 		this.syncProgress = null; // {done, total} during first sync
 		this.lastSyncAt = 0;
@@ -1406,7 +1409,8 @@ module.exports = class UnisonPlugin extends Plugin {
 		this.settings.serverUrl = OFFICIAL_SERVER;
 		this.settings.room = 'unison-' + genId() + genId().slice(0, 4);
 		this.settings.apiKey = '';
-		this.settings.token = '';
+		this.settings.token = 'rk' + genId() + genId();
+		this._createPending = true;
 		await this.saveSettings();
 		this.disconnect(true);
 		this.connect(true);
@@ -1927,7 +1931,8 @@ module.exports = class UnisonPlugin extends Plugin {
 			try {
 				const files = await this.collectLocalFiles();
 				if (this._connEpoch !== epoch || this.ws !== ws) return; // superseded during read
-				this.send({ type: 'hello', room: this.settings.room, user: this.settings.user, clientId: this.clientId, color: this.color, token: this.settings.token || '', apiKey: this.settings.apiKey || '', license: this.settings.license || '', files, device: this.deviceId() });
+				this.send({ type: 'hello', room: this.settings.room, user: this.settings.user, clientId: this.clientId, color: this.color, token: this.settings.token || '', apiKey: this.settings.apiKey || '', license: this.settings.license || '', create: this._createPending === true, files, device: this.deviceId() });
+				this._createPending = false;
 			} catch (e) { /* ignore */ }
 		};
 		ws.onmessage = ev => {
