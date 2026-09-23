@@ -62,6 +62,7 @@ const DEFAULT_SETTINGS = {
 	shareCursor: true,
 	showRemoteLines: true, // highlight lines where collaborators stand (CSS only, never touches text)
 	lang: '',            // '' = auto (system), 'en', 'ru'
+	serverMode: 'hosted', // 'hosted' (built-in relay) | 'custom' (own server)
 	license: '',         // Pro license key (unlocks unlimited devices per room)
 };
 
@@ -194,6 +195,9 @@ const I18N = {
 		syncSection: 'Sync',
 		updateSection: 'Updates',
 		roomSection: 'Room',
+		modeHosted: 'Unison hosting',
+		modeCustom: 'My own server',
+		customSection: 'Custom server',
 		createRoom: 'Create a room',
 		createRoomDesc: 'Start a room on the Unison server and share one code. Anyone, anywhere can join (up to 5 people).',
 		roomCreated: 'Room created. Press "Copy invite code" and send it to a friend.',
@@ -359,6 +363,9 @@ const I18N = {
 		syncSection: 'Синхронизация',
 		updateSection: 'Обновления',
 		roomSection: 'Комната',
+		modeHosted: 'Хостинг Unison',
+		modeCustom: 'Свой сервер',
+		customSection: 'Свой сервер',
 		createRoom: 'Создать комнату',
 		createRoomDesc: 'Создать комнату на сервере Unison и отправить один код. Подключиться можно откуда угодно (до 5 человек).',
 		roomCreated: 'Комната создана. Нажми «Скопировать код» и отправь другу.',
@@ -913,28 +920,82 @@ class UnisonSettingTab extends PluginSettingTab {
 			return setting;
 		};
 
-		// ── room ───────────────────────────────────────────────
-		h3(p.t('roomSection'));
-		new Setting(containerEl)
-			.setName(p.t('createRoom'))
-			.setDesc(p.t('createRoomDesc'))
-			.addButton(b => b.setCta().setButtonText(p.t('createRoom')).onClick(async () => { await p.createRoom(); this.display(); }))
-			.addButton(b => b.setButtonText(p.t('joinRoom')).onClick(() => p.quickConnect()));
-		new Setting(containerEl)
-			.setName(p.t('shareRoom'))
-			.setDesc(p.t('shareRoomDesc'))
-			.addButton(b => b.setButtonText(p.t('copyInvite')).onClick(() => p.copyConnectionCode()));
-		new Setting(containerEl)
-			.setName(p.t('autoConnectName'))
-			.setDesc(p.t('autoConnectDesc'))
-			.addToggle(t => t.setValue(p.settings.autoConnect !== false)
-				.onChange(async v => { p.settings.autoConnect = v; await p.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(p.t('connectToggle'))
-			.addButton(b => b.setButtonText(p.connected ? p.t('disconnect') : p.t('connect')).onClick(() => {
-				if (p.connected) p.disconnect(true); else p.connect(true);
+		// ── server mode: hosted vs custom ──────────────────────
+		const modeRow = containerEl.createDiv({ cls: 'unison-seg' });
+		const segBtn = (label, value) => {
+			const b = modeRow.createEl('button', { cls: 'unison-seg-btn' + (p.settings.serverMode === value ? ' is-active' : ''), text: label });
+			b.onclick = async () => {
+				if (p.settings.serverMode === value) return;
+				p.settings.serverMode = value;
+				await p.saveSettings();
+				p.disconnect(true);
 				this.display();
-			}));
+			};
+			return b;
+		};
+		segBtn(p.t('modeHosted'), 'hosted');
+		segBtn(p.t('modeCustom'), 'custom');
+
+		if (p.settings.serverMode === 'custom') {
+			// ── custom server ──────────────────────────────────
+			h3(p.t('customSection'));
+			bindText(new Setting(containerEl)
+				.setName(p.t('serverName'))
+				.setDesc(p.t('serverDesc')),
+				() => p.settings.serverUrl,
+				async v => { p.settings.serverUrl = v; await p.saveSettings(); },
+				{ placeholder: 'ws://host:3000' });
+			bindText(new Setting(containerEl)
+				.setName(p.t('apiKeyName'))
+				.setDesc(p.t('apiKeyDesc')),
+				() => p.settings.apiKey,
+				async v => { p.settings.apiKey = v; await p.saveSettings(); },
+				{ placeholder: 'key', password: true });
+			bindText(new Setting(containerEl)
+				.setName(p.t('roomKeyName'))
+				.setDesc(p.t('roomKeyDesc')),
+				() => p.settings.room,
+				async v => { const k = (v || '').trim(); p.settings.room = k || 'default'; p.settings.token = p.settings.room; await p.saveSettings(); },
+				{ placeholder: 'unison-...' });
+			new Setting(containerEl)
+				.setName(p.t('connectToggle'))
+				.addButton(b => b.setButtonText(p.connected ? p.t('disconnect') : p.t('connect')).onClick(() => {
+					if (p.connected) p.disconnect(true); else p.connect(true);
+					this.display();
+				}));
+			new Setting(containerEl)
+				.setName(p.t('autoConnectName'))
+				.setDesc(p.t('autoConnectDesc'))
+				.addToggle(t => t.setValue(p.settings.autoConnect !== false)
+					.onChange(async v => { p.settings.autoConnect = v; await p.saveSettings(); }));
+			new Setting(containerEl)
+				.setName(p.t('shareRoom'))
+				.setDesc(p.t('shareRoomDesc'))
+				.addButton(b => b.setButtonText(p.t('copyInvite')).onClick(() => p.copyConnectionCode()));
+		} else {
+			// ── hosted room ────────────────────────────────────
+			h3(p.t('roomSection'));
+			new Setting(containerEl)
+				.setName(p.t('createRoom'))
+				.setDesc(p.t('createRoomDesc'))
+				.addButton(b => b.setCta().setButtonText(p.t('createRoom')).onClick(async () => { await p.createRoom(); this.display(); }))
+				.addButton(b => b.setButtonText(p.t('joinRoom')).onClick(() => p.quickConnect()));
+			new Setting(containerEl)
+				.setName(p.t('shareRoom'))
+				.setDesc(p.t('shareRoomDesc'))
+				.addButton(b => b.setButtonText(p.t('copyInvite')).onClick(() => p.copyConnectionCode()));
+			new Setting(containerEl)
+				.setName(p.t('autoConnectName'))
+				.setDesc(p.t('autoConnectDesc'))
+				.addToggle(t => t.setValue(p.settings.autoConnect !== false)
+					.onChange(async v => { p.settings.autoConnect = v; await p.saveSettings(); }));
+			new Setting(containerEl)
+				.setName(p.t('connectToggle'))
+				.addButton(b => b.setButtonText(p.connected ? p.t('disconnect') : p.t('connect')).onClick(() => {
+					if (p.connected) p.disconnect(true); else p.connect(true);
+					this.display();
+				}));
+		}
 
 		// ── plan (cards) ───────────────────────────────────────
 		h3(p.t('planSection'));
@@ -1019,28 +1080,6 @@ class UnisonSettingTab extends PluginSettingTab {
 		adv.createEl('summary', { text: p.t('advanced') });
 		const advBody = adv.createDiv({ cls: 'unison-guide-body' });
 
-		if (p.usesOfficial()) {
-			advBody.createEl('p', { cls: 'unison-settings-hint', text: p.t('advancedManaged') });
-		} else {
-			bindText(new Setting(advBody)
-				.setName(p.t('serverName'))
-				.setDesc(p.t('serverDesc')),
-				() => p.settings.serverUrl,
-				async v => { p.settings.serverUrl = v; await p.saveSettings(); },
-				{ placeholder: 'ws://host:3000' });
-			bindText(new Setting(advBody)
-				.setName(p.t('apiKeyName'))
-				.setDesc(p.t('apiKeyDesc')),
-				() => p.settings.apiKey,
-				async v => { p.settings.apiKey = v; await p.saveSettings(); },
-				{ placeholder: 'key', password: true });
-			bindText(new Setting(advBody)
-				.setName(p.t('roomKeyName'))
-				.setDesc(p.t('roomKeyDesc')),
-				() => p.settings.room,
-				async v => { const k = (v || '').trim(); p.settings.room = k || 'default'; p.settings.token = p.settings.room; await p.saveSettings(); },
-				{ placeholder: 'unison-...' });
-		}
 		new Setting(advBody)
 			.setName(p.t('langLabel'))
 			.setDesc(p.t('langDesc'))
@@ -1147,6 +1186,9 @@ module.exports = class UnisonPlugin extends Plugin {
 		if (!this.settings.scopeMode) this.settings.scopeMode = 'all';
 		if (this.settings.updateUrl === undefined) this.settings.updateUrl = '';
 		if (this.settings.apiKey === undefined) this.settings.apiKey = '';
+		if (!this.settings.serverMode) {
+			this.settings.serverMode = (this.settings.serverUrl && this.settings.serverUrl !== OFFICIAL_SERVER) ? 'custom' : 'hosted';
+		}
 		// migrate: .obsidian used to be excluded via excludePatterns
 		if (this.settings.excludePatterns && this.settings.excludePatterns.includes('.obsidian')) {
 			this.settings.excludePatterns = this.settings.excludePatterns

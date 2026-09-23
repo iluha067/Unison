@@ -4,12 +4,15 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
-## [3.4.1] - 2026-09-23
+## [3.5.0] - 2026-09-23
 
 Unison: real-time collaborative vault sync over a hosted WebSocket server.
 
 ### Features
 
+- **Server mode switch** at the top of settings: "Unison hosting" or "My own
+  server". Picking "My own server" shows the address, API key and room key
+  fields, so it is clear where a custom server goes.
 - **Rooms on the public Unison server**: "Create a room" starts a room on the
   hosted relay and shares one code, so people can join from anywhere.
 - **Per-room keys**: every new room gets its own generated key; the invite code
