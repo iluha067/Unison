@@ -5,8 +5,6 @@ connect the same vault through a small self-hosted WebSocket server: edits merge
 live, text and binary files stay in sync, and every file keeps server-side
 version history.
 
-> Formerly "UnisonSync" / "Realtime Sync". Plugin id: `unison`.
-
 ## Features
 
 - **Live collaboration** - updates, deletes and renames go to everyone in the
