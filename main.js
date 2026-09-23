@@ -1262,7 +1262,7 @@ module.exports = class UnisonPlugin extends Plugin {
 		for (const t of this.debounceTimers.values()) clearTimeout(t);
 		this.debounceTimers.clear();
 		try { if (this.ws && this.ws.readyState === 1) this.ws.close(); } catch (e) { /* ignore */ }
-		try { if (this._host && this._host.child) this._host.child.kill(); } catch (e) { /* ignore */ }
+		try { if (this._host && this._host.server) this._host.server.close(); } catch (e) { /* ignore */ }
 		this._host = null;
 		this.app.workspace.detachLeavesOfType(VIEW_TYPE_PRESENCE);
 	}
@@ -1689,120 +1689,85 @@ module.exports = class UnisonPlugin extends Plugin {
 		const target = path.join(this.absPluginDir(), 'unison-host.cjs');
 		let ok = false;
 		try { const st = fs.statSync(target); ok = !!(st && st.size > 1000); } catch (e) { ok = false; }
-		if (ok) return target;
-		const r = await requestUrl({ url: HOST_SERVER_URL, throw: false, headers: { 'Cache-Control': 'no-cache' } });
-		if (!r || r.status !== 200 || typeof r.text !== 'string' || r.text.length < 1000) {
-			throw new Error('download failed');
+		if (!ok) {
+			const r = await requestUrl({ url: HOST_SERVER_URL, throw: false, headers: { 'Cache-Control': 'no-cache' } });
+			if (!r || r.status !== 200 || typeof r.text !== 'string' || r.text.length < 1000) {
+				throw new Error('download failed');
+			}
+			await fs.promises.writeFile(target, r.text, 'utf8');
 		}
-		await fs.promises.writeFile(target, r.text, 'utf8');
 		return target;
 	}
 
-	/** Spawn the server and resolve once it is reachable (or clearly alive). */
-	async hostSpawn(exe, script, env, dir, port, onData, isListening) {
-		let child;
+	/** Load the server file as a CommonJS module and return its exports. */
+	loadHostModule(scriptPath) {
 		try {
-			child = require('child_process').spawn(exe, [script], { env, cwd: dir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-		} catch (e) {
-			return { child: null, error: (e && e.message) || String(e) };
-		}
-		try { child.stderr.on('data', onData); } catch (e) { /* ignore */ }
-		try { child.stdout.on('data', onData); } catch (e) { /* ignore */ }
-		let dead = null;
-		child.once('exit', (code, sig) => { dead = `exit ${code}${sig ? ' (' + sig + ')' : ''}`; });
-		child.once('error', (e) => { dead = (e && e.message) || 'spawn error'; });
-		const start = Date.now();
-		while (Date.now() - start < 12000) {
-			if (dead) return { child, error: dead };
-			if (isListening && isListening()) return { child, ready: true, confirmed: true };
-			let healthy = false;
-			try {
-				const r = await requestUrl({ url: `http://127.0.0.1:${port}/health`, throw: false });
-				healthy = !!(r && r.status === 200 && r.json && r.json.ok);
-			} catch (e) { /* ignore */ }
-			if (!healthy) {
-				try {
-					const r2 = await fetch(`http://127.0.0.1:${port}/health`);
-					if (r2 && r2.ok) { const j = await r2.json(); healthy = !!(j && j.ok); }
-				} catch (e) { /* ignore */ }
-			}
-			if (healthy) return { child, ready: true, confirmed: true };
-			// Some setups block loopback requests; if the process is still alive
-			// after a moment, assume it is up and let the WebSocket connect decide.
-			if (Date.now() - start > 2500) return { child, ready: true, confirmed: false };
-			await new Promise(r => setTimeout(r, 300));
-		}
-		return { child, error: 'timeout' };
+			try { delete require.cache[require.resolve(scriptPath)]; } catch (e) { /* ignore */ }
+			const m = require(scriptPath);
+			if (m && typeof m.createServer === 'function') return m;
+		} catch (e) { /* fall back to evaluating the source below */ }
+		const fs = require('fs');
+		const path = require('path');
+		const source = fs.readFileSync(scriptPath, 'utf8');
+		const mod = { exports: {} };
+		const fn = new Function('module', 'exports', 'require', '__dirname', '__filename', source);
+		fn(mod, mod.exports, require, path.dirname(scriptPath), scriptPath);
+		return mod.exports;
 	}
 
 	/** Start the sync server locally and point the plugin at it. */
 	async hostStart() {
 		if (!this.isDesktop()) { new Notice(this.t('hostMobile')); return false; }
 		if (this.hostRunning()) return true;
-		let cp;
-		try { cp = require('child_process'); }
-		catch (e) { new Notice(this.t('hostNotSupported')); return false; }
-
-		new Notice(this.t('hostStarting'), 4000);
-		let script;
-		try { script = await this.ensureHostScript(); }
-		catch (e) { new Notice(this.t('hostFailed', (e && e.message) || String(e)), 9000); return false; }
+		let createServer;
+		try {
+			const script = await this.ensureHostScript();
+			const mod = this.loadHostModule(script);
+			createServer = mod && mod.createServer;
+			if (typeof createServer !== 'function') throw new Error('bad server module');
+		} catch (e) {
+			new Notice(this.t('hostFailed', (e && e.message) || String(e)), 9000);
+			this.log('host failed: ' + ((e && e.message) || e));
+			return false;
+		}
 
 		const fs = require('fs');
-		const dir = require('path').join(this.absPluginDir(), 'host-data');
-		try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { /* ignore */ }
+		const path = require('path');
+		const dataDir = path.join(this.absPluginDir(), 'host-data');
+		try { fs.mkdirSync(dataDir, { recursive: true }); } catch (e) { /* ignore */ }
 
 		if (!this.settings.hostRoom) this.settings.hostRoom = 'unison-' + genId().slice(0, 6);
 		if (!this.settings.hostApiKey) this.settings.hostApiKey = 'uk' + genId() + genId();
 		if (!this.settings.hostToken) this.settings.hostToken = 'rt' + genId() + genId();
 		await this.saveSettings();
 
-		const port = this.settings.hostPort || 3210;
-		const env = Object.assign({}, process.env, {
-			ELECTRON_RUN_AS_NODE: '1',
-			PORT: String(port),
-			HOST: '0.0.0.0',
-			DATA_DIR: dir,
-			PLUGIN_DIR: this.absPluginDir(),
-			API_KEY: this.settings.hostApiKey,
-			ROOM_TOKEN: this.settings.hostToken,
-			LOG_LEVEL: 'info',
-		});
-
-		let stderr = '';
-		let listening = false;
-		const onData = (d) => {
-			const s = d.toString();
-			stderr = (stderr + s).slice(-2000);
-			if (s.indexOf('listening on') >= 0) listening = true;
-		};
-		const isListening = () => listening;
-		this.log(`host: execPath=${process.execPath} script=${script} port=${port}`);
-
-		let res = await this.hostSpawn(process.execPath, script, env, dir, port, onData, isListening);
-		if (!res.ready) {
-			// Electron may not honour ELECTRON_RUN_AS_NODE here; try a system node.
-			try { if (res.child) res.child.kill(); } catch (e) { /* ignore */ }
-			this.log('host: primary spawn failed (' + (res.error || '?') + '), trying system node');
-			stderr = '';
-			listening = false;
-			res = await this.hostSpawn('node', script, env, dir, port, onData, isListening);
+		const basePort = this.settings.hostPort || 3210;
+		let server = null, port = 0, lastErr = null;
+		for (let i = 0; i < 10; i++) {
+			const tryPort = basePort + i;
+			try {
+				server = createServer({
+					port: tryPort, host: '0.0.0.0', dataDir, pluginDir: this.absPluginDir(),
+					apiKey: this.settings.hostApiKey, roomToken: this.settings.hostToken, logLevel: 'warn',
+				});
+				await server.listen(tryPort, '0.0.0.0');
+				port = tryPort;
+				break;
+			} catch (e) {
+				lastErr = e;
+				try { if (server) await server.close(); } catch (e2) { /* ignore */ }
+				server = null;
+			}
 		}
-		if (!res.ready) {
-			try { if (res.child) res.child.kill(); } catch (e) { /* ignore */ }
-			this._host = null;
-			const detail = stderr.trim() || res.error || 'timeout';
-			new Notice(this.t('hostFailed', detail), 12000);
+		if (!server) {
+			const detail = (lastErr && lastErr.message) || 'could not bind a port';
+			new Notice(this.t('hostFailed', detail), 10000);
 			this.log('host failed: ' + detail);
 			return false;
 		}
-		const child = res.child;
-		this._host = { child, port, running: true, shareUrl: `ws://${this.lanAddress()}:${port}`, dataDir: dir };
-		child.on('exit', () => {
-			if (this._host && this._host.child === child) { this._host = null; this.refreshPresence(); }
-		});
-		child.on('error', (e) => { this.log('host process error: ' + ((e && e.message) || e)); });
-		if (!res.confirmed) this.log('host: process alive but /health not reachable; connecting anyway');
+
+		this._host = { server, port, running: true, shareUrl: `ws://${this.lanAddress()}:${port}`, dataDir };
+		this.log(`host: listening on 0.0.0.0:${port} (in-process)`);
 
 		this.settings.hostEnabled = true;
 		this.settings.serverUrl = `ws://127.0.0.1:${port}`;
@@ -1821,7 +1786,7 @@ module.exports = class UnisonPlugin extends Plugin {
 	async hostStop() {
 		const h = this._host;
 		this._host = null;
-		if (h && h.child) { try { h.child.kill(); } catch (e) { /* ignore */ } }
+		if (h && h.server) { try { await h.server.close(); } catch (e) { /* ignore */ } }
 		this.settings.hostEnabled = false;
 		await this.saveSettings();
 		this.disconnect(true);

@@ -4,7 +4,7 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
-## [3.1.1] - 2026-09-23
+## [3.1.2] - 2026-09-23
 
 Unison (formerly UnisonSync / Realtime Sync): real-time collaborative vault
 sync over a self-hosted WebSocket server.
@@ -41,11 +41,9 @@ sync over a self-hosted WebSocket server.
 
 ### Fixed
 
-- Hosting no longer reports a false timeout: readiness is detected from the
-  server's own "listening" output, with the loopback health check as a fallback,
-  and a system `node` is tried if Electron refuses to run as Node.
-- Host failures now surface the child process output instead of an empty
-  "timeout".
+- Hosting now runs the server **inside Obsidian** (in-process) instead of
+  spawning a child process. This fixes the "server started but the plugin cannot
+  connect" case, where the child never actually bound the port.
 - Name and color moved to **Settings -> Unison** (they lived in the sidebar,
   where presence updates re-rendered them mid-typing and could tear the panel
   apart or blank it).
