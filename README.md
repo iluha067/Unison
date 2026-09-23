@@ -73,4 +73,4 @@ cd server && npm install && npm test
 
 ## License
 
-[MIT](LICENSE) (c) Bredatens
+[MIT](LICENSE) (c) Unison
