@@ -58,10 +58,19 @@ API_KEY="$(head -c32 /dev/urandom | base64)" PORT=3000 DATA_DIR=./data node serv
 Then in the plugin set **Server** `ws://your-host:3000`, the same **API key**,
 and pick a shared **Room** name.
 
+## Plans
+
+- **Free** - up to 5 devices per room.
+- **Pro ($3 / month)** - unlimited devices per room.
+
+The only difference is how many devices can join a room. See
+[`docs/plans.md`](docs/plans.md).
+
 ## Documentation
 
 - [`docs/server-setup.md`](docs/server-setup.md) - deploy the server from scratch
 - [`docs/protocol.md`](docs/protocol.md) - WebSocket message reference
+- [`docs/plans.md`](docs/plans.md) - Free and Pro plans, license keys
 - [`docs/updates.md`](docs/updates.md) - how plugin updates work
 - [`SECURITY.md`](SECURITY.md) - threat model and hardening
 - [`CHANGELOG.md`](CHANGELOG.md) - version history

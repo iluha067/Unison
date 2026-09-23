@@ -4,16 +4,17 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
-## [3.1.3] - 2026-09-23
+## [3.2.0] - 2026-09-23
 
-Unison (formerly UnisonSync / Realtime Sync): real-time collaborative vault
-sync over a self-hosted WebSocket server.
+Unison: real-time collaborative vault sync over a hosted WebSocket server.
 
 ### Features
 
-- **Host on your computer** (desktop): start the sync server from the plugin
-  with one click and share a single connection code; friends join by pasting it.
-  The plugin spawns a bundled server, so there is no terminal and no install.
+- **Rooms on the public Unison server**: "Create a room" starts a room on the
+  hosted relay and shares one code, so people can join from anywhere.
+- **Plans**: Free allows up to 5 devices per room; Pro ($3/month) is unlimited.
+  Pro is unlocked with a license key the server verifies offline
+  (`server/make-license.js`, `docs/plans.md`).
 - Live file updates, deletes and renames, broadcast to everyone in the room.
 - Three-way line merge with a line-union fallback, so concurrent typing merges
   in place instead of being overwritten or duplicated.
@@ -23,19 +24,23 @@ sync over a self-hosted WebSocket server.
 - Per-file server-side version history with restore from the command palette.
 - Scope control: whole vault or selected folders, text-only mode, excludes.
 - Quick connect codes and self-update from GitHub releases.
+- **Host on your computer** (desktop, local network): start the server from the
+  plugin with one click for offline or LAN use.
 
 ### Changed
 
-- "Start on launch" is off by default, and starting the server manually no
-  longer turns it on. Auto-start only happens when you enable the toggle.
-- The server is now a single file with **zero dependencies** (its own minimal
-  WebSocket implementation), so hosting needs nothing but Node.js.
 - The sidebar is reduced to one primary action plus a share button; scope,
   sync mode, name and color moved into settings.
+- "Start on launch" is off by default, and starting the server manually no
+  longer turns it on.
+- The server is a single file with **zero dependencies** (its own minimal
+  WebSocket implementation).
+- Default `MAX_CLIENTS_PER_ROOM` is 5.
 
 ### Server
 
 - Rooms with presence, cursor and history relay.
+- Free and Pro plans per room via offline license verification.
 - `GET /health`, `GET /rooms` and `GET /metrics` (Prometheus format).
 - Graceful shutdown, idle-room unloading, per-room storage limits, per-client
   rate limiting and backpressure handling.
@@ -43,15 +48,10 @@ sync over a self-hosted WebSocket server.
 
 ### Fixed
 
-- Hosting now runs the server **inside Obsidian** (in-process) instead of
-  spawning a child process. This fixes the "server started but the plugin cannot
-  connect" case, where the child never actually bound the port.
-- Name and color moved to **Settings -> Unison** (they lived in the sidebar,
-  where presence updates re-rendered them mid-typing and could tear the panel
-  apart or blank it).
+- Name and color moved to Settings (they were re-rendered in the sidebar while
+  typing, which could tear the panel apart or blank it).
 - The sidebar is never rebuilt while one of its controls has focus, and a
   render error can no longer empty the whole panel.
 - Renaming or recoloring now reaches every other client immediately.
-- Typing no longer duplicates text when alone in a room: periodic file-index
-  responses are treated as deltas instead of a full reconcile, so the file is
-  no longer merged against the server on every sweep.
+- Typing no longer duplicates text when alone in a room (periodic file-index
+  responses are delta reconciles, not a full one).

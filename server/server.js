@@ -246,7 +246,9 @@ const BASE_CONFIG = {
   histMaxBytes: envInt('HIST_MAX_BYTES', 256 * 1024, 0, 8 * 1024 * 1024),
   histTotalBytes: envInt('HIST_TOTAL_BYTES', 512 * 1024, 0, 32 * 1024 * 1024),
   maxRoomBytes: envInt('MAX_ROOM_BYTES', 512 * 1024 * 1024, 1024 * 1024, 8 * 1024 * 1024 * 1024),
-  maxClientsPerRoom: envInt('MAX_CLIENTS_PER_ROOM', 64, 1, 4096),
+  maxClientsPerRoom: envInt('MAX_CLIENTS_PER_ROOM', 5, 1, 4096),
+  proMaxClients: envInt('PRO_MAX_CLIENTS', 1000, 1, 100000),
+  licenseSecret: process.env.LICENSE_SECRET || '',
   maxBufferedBytes: envInt('MAX_BUFFERED_BYTES', 8 * 1024 * 1024, 64 * 1024, 256 * 1024 * 1024),
   idleUnloadMs: envInt('IDLE_UNLOAD_MS', 30 * 60 * 1000, 0, 24 * 3600 * 1000),
   rateBurst: envInt('RATE_BURST', 300, 10, 100000),
@@ -299,6 +301,26 @@ function safeEqual(a, b) {
     return false;
   }
   return crypto.timingSafeEqual(ba, bb);
+}
+
+/**
+ * Verify a Pro license key offline. Format: `UNISON-<base64url(json)>.<hmac>`.
+ * The payload is { v, plan:'pro', id, iat, exp }. Signed with LICENSE_SECRET.
+ */
+function verifyLicense(license, secret) {
+  if (!secret || typeof license !== 'string') return null;
+  const m = license.trim().match(/^UNISON-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/);
+  if (!m) return null;
+  const payloadB64 = m[1];
+  const expected = crypto.createHmac('sha256', secret).update(payloadB64).digest('base64url');
+  const got = Buffer.from(m[2], 'utf8');
+  const want = Buffer.from(expected, 'utf8');
+  if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) return null;
+  let payload;
+  try { payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')); } catch (e) { return null; }
+  if (!payload || payload.plan !== 'pro') return null;
+  if (payload.exp && Date.now() > payload.exp) return null;
+  return payload;
 }
 
 function sanitizePath(p) {
@@ -375,6 +397,19 @@ function createServer(overrides = {}) {
   let pendingWrites = 0;
   let shuttingDown = false;
   const startedAt = Date.now();
+
+  // room plan registry: { <room>: { plan, exp, licenseId } }
+  const registryFile = path.join(cfg.dataDir, '.rooms.json');
+  let registry = {};
+  try { registry = JSON.parse(fs.readFileSync(registryFile, 'utf8')) || {}; } catch (e) { registry = {}; }
+  function saveRegistry() {
+    try { fs.mkdirSync(cfg.dataDir, { recursive: true }); fs.writeFileSync(registryFile, JSON.stringify(registry)); } catch (e) { /* ignore */ }
+  }
+  function roomPlanOf(room) {
+    const r = registry[room];
+    if (r && r.plan === 'pro' && (!r.exp || Date.now() < r.exp)) return 'pro';
+    return 'free';
+  }
 
   const roomDir = (room) => path.join(cfg.dataDir, room);
   const histDir = (room) => path.join(cfg.dataDir, HISTORY_DIR, room);
@@ -611,6 +646,7 @@ function createServer(overrides = {}) {
       res.end(JSON.stringify({
         ok: true, service: 'unison', version: pkg.version,
         authRequired: cfg.requireAuth || !!cfg.apiKey,
+        maxClientsPerRoom: cfg.maxClientsPerRoom,
         uptime: Math.floor((Date.now() - startedAt) / 1000),
         rooms: rooms.size, users, files, historyFiles: history,
         totalConnections, memoryMB: Math.round(process.memoryUsage().rss / 1048576),
@@ -702,9 +738,21 @@ function createServer(overrides = {}) {
         room = r; clientId = cid; user = u;
         const st = getRoom(room);
         touchRoom(room);
+
+        // Pro license upgrades this room to an unlimited plan.
+        const lic = verifyLicense(msg.license, cfg.licenseSecret);
+        if (lic) {
+          registry[room] = { plan: 'pro', exp: lic.exp || 0, licenseId: lic.id || '' };
+          saveRegistry();
+        }
+        const plan = roomPlanOf(room);
+        const limit = plan === 'pro' ? cfg.proMaxClients : cfg.maxClientsPerRoom;
+        st.plan = plan;
+        st.limit = limit;
+
         const isSame = st.clients.has(clientId);
-        if (!isSame && st.clients.size >= cfg.maxClientsPerRoom) {
-          send(ws, { type: 'error', message: 'room is full' });
+        if (!isSame && st.clients.size >= limit) {
+          send(ws, { type: 'error', message: plan === 'pro' ? 'room is full' : 'room is full (free plan: 5 devices). Get Pro for unlimited.' });
           ws.close(1008, 'room full');
           return;
         }
@@ -714,7 +762,7 @@ function createServer(overrides = {}) {
         if (prev && prev.ws !== ws) { try { prev.ws.close(1000, 'replaced'); } catch (e) { /* ignore */ } }
         st.clients.set(clientId, { ws, user, clientId, color: String(msg.color || '#2196f3').slice(0, 16), path: '', line: 0, sel: null });
 
-        send(ws, { type: 'welcome', you: { user, clientId }, users: presenceList(room).filter((x) => x.clientId !== clientId), files: fileListOf(st) });
+        send(ws, { type: 'welcome', you: { user, clientId }, users: presenceList(room).filter((x) => x.clientId !== clientId), files: fileListOf(st), plan, limit });
         broadcast(room, { type: 'user-join', user, clientId, color: st.clients.get(clientId).color }, clientId);
         broadcast(room, { type: 'presence', users: presenceList(room) }, null);
         log('info', `join: ${user} (${clientId}) -> room "${room}" (${st.clients.size} online)`);
@@ -909,4 +957,4 @@ if (require.main === module) {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-module.exports = { createServer, sanitizePath, sanitizeRoom, sanitizeUser, sanitizeSel, fnv1a, safeEqual, encodingFor };
+module.exports = { createServer, sanitizePath, sanitizeRoom, sanitizeUser, sanitizeSel, fnv1a, safeEqual, encodingFor, verifyLicense };

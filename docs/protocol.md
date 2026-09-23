@@ -11,7 +11,7 @@ A client must send `hello` first; any other message before that is answered with
 
 | type | fields | notes |
 | --- | --- | --- |
-| `hello` | `room`, `user`, `clientId`, `color`, `token`, `apiKey`, `files?`, `device?` | Join a room. `apiKey` must match the server when auth is on. |
+| `hello` | `room`, `user`, `clientId`, `color`, `token`, `apiKey`, `license?`, `files?`, `device?` | Join a room. `apiKey` must match the server when auth is on; `license` is an optional Pro key. |
 | `ping` | `t` | Latency probe. |
 | `list` | - | Ask for the full server file index. |
 | `file-update` | `path`, `content`, `encoding`, `mtime?` | `encoding` is `utf8` (default) or `base64`. |
@@ -26,7 +26,7 @@ A client must send `hello` first; any other message before that is answered with
 
 | type | fields | notes |
 | --- | --- | --- |
-| `welcome` | `you:{user,clientId}`, `users[]`, `files[]` | Sent right after a valid `hello`. |
+| `welcome` | `you:{user,clientId}`, `users[]`, `files[]`, `plan`, `limit` | Sent right after a valid `hello`. `plan` is `free` or `pro`; `limit` is the device cap for the room. |
 | `file-list` | `files[]` | Reply to `list`. Each item: `path`, `mtime`, `size`, `hash`, `version`, `encoding`. |
 | `user-join` / `user-leave` | `user`, `clientId`, `color?` | |
 | `presence` | `users[]` | Full participant list; each has `user`, `clientId`, `color`, `path`, `line`, `sel`. |

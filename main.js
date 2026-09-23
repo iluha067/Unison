@@ -18,6 +18,11 @@ const { Plugin, ItemView, Notice, PluginSettingTab, Setting, MarkdownView, norma
 const VIEW_TYPE_PRESENCE = 'unison-presence';
 // Raw GitHub base for self-updates.
 const UPDATE_REPO = 'https://raw.githubusercontent.com/iluha067/Unison/main';
+// Public Unison relay that hosts rooms so people can join from anywhere.
+const OFFICIAL_SERVER = 'ws://94.156.179.131:3000';
+// Payment link shown by the "Get Pro" button. Replace with your own page
+// (Gumroad, Boosty, Stripe, ...) that delivers a license key after payment.
+const BUY_URL = 'https://github.com/iluha067/Unison#plans';
 // Server source used by the built-in "host on this computer" feature (desktop).
 const HOST_SERVER_URL = UPDATE_REPO + '/server/server.js';
 const RECONNECT_MAX = 30000;
@@ -64,6 +69,7 @@ const DEFAULT_SETTINGS = {
 	hostRoom: '',        // generated room for the local server
 	hostApiKey: '',      // generated API key for the local server
 	hostToken: '',       // generated room token for the local server
+	license: '',         // Pro license key (unlocks unlimited devices per room)
 };
 
 // ---------- i18n ----------
@@ -194,6 +200,30 @@ const I18N = {
 		connSection: 'Connection',
 		syncSection: 'Sync',
 		updateSection: 'Updates',
+		roomSection: 'Room',
+		createRoom: 'Create a room',
+		createRoomDesc: 'Start a room on the Unison server and share one code. Anyone, anywhere can join (up to 5 people).',
+		roomCreated: 'Room created. Press "Copy invite code" and send it to a friend.',
+		joinRoom: 'Join with code',
+		shareRoom: 'Share this room',
+		shareRoomDesc: 'Send the code. A friend installs Unison, pastes it and joins.',
+		peopleMax: (n, max) => `${n} of ${max} online`,
+		roomFull: 'Room is full (5 people max).',
+		advanced: 'Advanced',
+		advancedConn: 'Server, room and keys',
+		advancedHost: 'Host on this computer (local network)',
+		planSection: 'Plan',
+		planFree: 'Free',
+		planPro: 'Pro',
+		planFreeDesc: 'Up to 5 devices per room.',
+		planProDesc: 'Unlimited devices per room. $3 / month.',
+		planCurrent: (plan, n, max) => plan === 'pro' ? 'Pro (unlimited devices)' : `Free (${n}/${max} devices)`,
+		planLicenseName: 'Pro license key',
+		planLicenseDesc: 'Paste the key you received after paying. It unlocks unlimited devices in this room.',
+		planBuy: 'Get Pro ($3/month)',
+		planBuyHint: 'After payment you receive a license key; paste it below.',
+		planThanks: 'Pro activated. Thanks!',
+		planFreeActive: 'You are on the Free plan.',
 		inviteFail: 'Could not copy',
 		inviteText: 'Server: {server}\nRoom: {room}\nInstall Unison and enter these. Pick a unique name!',
 		invite: 'Copy invite',
@@ -328,6 +358,30 @@ const I18N = {
 		connSection: 'Подключение',
 		syncSection: 'Синхронизация',
 		updateSection: 'Обновления',
+		roomSection: 'Комната',
+		createRoom: 'Создать комнату',
+		createRoomDesc: 'Создать комнату на сервере Unison и отправить один код. Подключиться можно откуда угодно (до 5 человек).',
+		roomCreated: 'Комната создана. Нажми «Скопировать код» и отправь другу.',
+		joinRoom: 'Подключиться по коду',
+		shareRoom: 'Поделиться комнатой',
+		shareRoomDesc: 'Отправьте код. Друг ставит Unison, вставляет код и подключается.',
+		peopleMax: (n, max) => `${n} из ${max} в сети`,
+		roomFull: 'Комната заполнена (максимум 5 человек).',
+		advanced: 'Дополнительно',
+		advancedConn: 'Сервер, комната и ключи',
+		advancedHost: 'Сервер на этом компьютере (локальная сеть)',
+		planSection: 'Тариф',
+		planFree: 'Бесплатный',
+		planPro: 'Pro',
+		planFreeDesc: 'До 5 устройств на комнату.',
+		planProDesc: 'Без ограничений на устройства в комнате. $3 / месяц.',
+		planCurrent: (plan, n, max) => plan === 'pro' ? 'Pro (без ограничений)' : `Бесплатный (${n}/${max} устройств)`,
+		planLicenseName: 'Ключ Pro',
+		planLicenseDesc: 'Вставьте ключ, полученный после оплаты. Он снимает ограничение на число устройств в этой комнате.',
+		planBuy: 'Купить Pro ($3/мес)',
+		planBuyHint: 'После оплаты ключ придёт на почту; вставьте его ниже.',
+		planThanks: 'Pro активирован. Спасибо!',
+		planFreeActive: 'У вас бесплатный тариф.',
 		inviteFail: 'Не удалось скопировать',
 		inviteText: 'Сервер: {server}\nКомната: {room}\nПоставь плагин Unison и введи эти данные. Имя выбери уникальное!',
 		invite: 'Скопировать приглашение',
@@ -637,7 +691,7 @@ class PresenceView extends ItemView {
 
 		const meta = head.createDiv({ cls: 'unison-head-meta' });
 		if (p.connected) {
-			meta.createSpan({ text: p.t('onlineCount', p.remoteUsers.size + 1) });
+			meta.createSpan({ text: p.roomPlan === 'pro' ? p.t('onlineCount', p.remoteUsers.size + 1) : p.t('peopleMax', p.remoteUsers.size + 1, p.roomLimit || 5) });
 			if (p.latency > 0) meta.createSpan({ text: ` · ${p.latency} ms` });
 		} else {
 			meta.createSpan({ text: p.settings.serverUrl.replace(/^wss?:\/\//, '') });
@@ -651,10 +705,15 @@ class PresenceView extends ItemView {
 		} else if (p.connected) {
 			this.button(actions, p.t('disconnect'), () => p.disconnect());
 			this.button(actions, '', () => p.copyConnectionCode(), 'unison-btn-icon', p.t('copyInvite'), 'share-2');
-		} else if (p.isDesktop() && (!p.settings.serverUrl || /^wss?:\/\/(127\.0\.0\.1|localhost)/i.test(p.settings.serverUrl))) {
+		} else if (p.isLoopbackUrl(p.settings.serverUrl)) {
+			// a local host URL that is not running -> offer to start it again
 			this.button(actions, p.t('hostStart'), () => { p.hostStart(); });
-		} else {
+		} else if (p.settings.serverUrl) {
 			this.button(actions, p.t('connect'), () => p.connect(true));
+			this.button(actions, '', () => p.quickConnect(), 'unison-btn-icon', p.t('joinRoom'), 'log-in');
+		} else {
+			this.button(actions, p.t('createRoom'), () => { p.createRoom(); });
+			this.button(actions, '', () => p.quickConnect(), 'unison-btn-icon', p.t('joinRoom'), 'log-in');
 		}
 
 		if (p.hostRunning()) {
@@ -919,6 +978,29 @@ class UnisonSettingTab extends PluginSettingTab {
 			containerEl.createEl('p', { cls: 'unison-settings-hint', text: p.t('hostMobile') });
 		}
 
+		// ── plan ───────────────────────────────────────────────
+		containerEl.createEl('h3', { text: p.t('planSection') });
+		new Setting(containerEl)
+			.setName(p.roomPlan === 'pro' ? p.t('planPro') : p.t('planFree'))
+			.setDesc(p.roomPlan === 'pro' ? p.t('planProDesc') : p.t('planFreeDesc'));
+		new Setting(containerEl)
+			.setName(p.t('planLicenseName'))
+			.setDesc(p.t('planLicenseDesc'))
+			.addText(t => t
+				.setPlaceholder('UNISON-...')
+				.setValue(p.settings.license || '')
+				.onChange(async v => {
+					p.settings.license = (v || '').trim();
+					await p.saveSettings();
+					if (p.connected) { p.disconnect(true); p.connect(true); }
+				}));
+		new Setting(containerEl)
+			.setName(p.t('planBuy'))
+			.setDesc(p.t('planBuyHint'))
+			.addButton(b => b.setCta().setButtonText(p.t('planBuy')).onClick(() => {
+				try { window.open(BUY_URL, '_blank'); } catch (e) { /* ignore */ }
+			}));
+
 		// ── connection ─────────────────────────────────────────
 		containerEl.createEl('h3', { text: p.t('connSection') });
 		bindText(new Setting(containerEl)
@@ -1113,6 +1195,8 @@ module.exports = class UnisonPlugin extends Plugin {
 		this.lastMsgAt = 0;
 		this.didInitialSync = false;
 		this._fullSyncPending = false;
+		this.roomLimit = 5;
+		this.roomPlan = 'free';
 		this.syncBusy = false;
 		this.syncProgress = null; // {done, total} during first sync
 		this.lastSyncAt = 0;
@@ -1315,6 +1399,19 @@ module.exports = class UnisonPlugin extends Plugin {
 		if (!this.shareServerUrl()) { new Notice(this.t('needServerUrl')); return; }
 		const code = this.makeConnectionCode();
 		navigator.clipboard.writeText(code).then(() => new Notice(this.t('codeCopied'), 5000), () => new Notice(this.t('inviteFail')));
+	}
+
+	/** Create a fresh room on the public server and connect to it. */
+	async createRoom() {
+		this.settings.serverUrl = OFFICIAL_SERVER;
+		this.settings.room = 'unison-' + genId() + genId().slice(0, 4);
+		this.settings.apiKey = '';
+		this.settings.token = '';
+		await this.saveSettings();
+		this.disconnect(true);
+		this.connect(true);
+		new Notice(this.t('roomCreated'), 9000);
+		this.refreshPresence();
 	}
 
 	/** Ask the user for a code, apply it and connect. */
@@ -1830,7 +1927,7 @@ module.exports = class UnisonPlugin extends Plugin {
 			try {
 				const files = await this.collectLocalFiles();
 				if (this._connEpoch !== epoch || this.ws !== ws) return; // superseded during read
-				this.send({ type: 'hello', room: this.settings.room, user: this.settings.user, clientId: this.clientId, color: this.color, token: this.settings.token || '', apiKey: this.settings.apiKey || '', files, device: this.deviceId() });
+				this.send({ type: 'hello', room: this.settings.room, user: this.settings.user, clientId: this.clientId, color: this.color, token: this.settings.token || '', apiKey: this.settings.apiKey || '', license: this.settings.license || '', files, device: this.deviceId() });
 			} catch (e) { /* ignore */ }
 		};
 		ws.onmessage = ev => {
@@ -2131,6 +2228,7 @@ module.exports = class UnisonPlugin extends Plugin {
 			case 'history-file': return this.onHistoryFile(msg);
 			case 'error': {
 				this.lastError = msg.message || 'server error';
+				if (/full/i.test(this.lastError)) new Notice(this.t('roomFull'), 10000);
 				this.toast('srv-err', 'Unison: ' + this.lastError, 15000, 5000);
 				this.log('server error: ' + this.lastError);
 				if (/token|auth|room/i.test(this.lastError)) this.shouldReconnect = false;
@@ -2203,6 +2301,8 @@ module.exports = class UnisonPlugin extends Plugin {
 
 	async onWelcome(msg) {
 		this.setUsers(msg.users);
+		if (msg.limit) this.roomLimit = msg.limit;
+		if (msg.plan) this.roomPlan = msg.plan;
 		this.log(`welcome: ${this.remoteUsers.size} online, ${(msg.files || []).length} files on server`);
 		// auto-open people panel on the right (once per session)
 		if (!this._panelOpened) {

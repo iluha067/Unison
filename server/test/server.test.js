@@ -6,7 +6,8 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
-const { createServer, sanitizePath, sanitizeRoom, sanitizeSel, safeEqual, encodingFor } = require('../server.js');
+const crypto = require('node:crypto');
+const { createServer, sanitizePath, sanitizeRoom, sanitizeSel, safeEqual, encodingFor, verifyLicense } = require('../server.js');
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'unison-test-'));
@@ -225,6 +226,57 @@ test('health endpoint reports version and auth', async () => {
     assert.equal(body.ok, true);
     assert.equal(body.service, 'unison');
     assert.equal(body.authRequired, true);
+  } finally { await server.close(); }
+});
+
+test('verifyLicense accepts a signed key and rejects tampering', () => {
+  const secret = 's3cret';
+  const payload = { v: 1, plan: 'pro', id: 'x', iat: Date.now(), exp: Date.now() + 1000 };
+  const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', secret).update(b64).digest('base64url');
+  assert.ok(verifyLicense(`UNISON-${b64}.${sig}`, secret));
+  assert.equal(verifyLicense(`UNISON-${b64}.${sig}`, 'other'), null);
+  assert.equal(verifyLicense('garbage', secret), null);
+  assert.equal(verifyLicense(`UNISON-${b64}.${sig}`, ''), null);
+});
+
+function makeKey(secret, expMs) {
+  const payload = { v: 1, plan: 'pro', id: 'test', iat: Date.now(), exp: expMs || Date.now() + 3600000 };
+  const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', secret).update(b64).digest('base64url');
+  return `UNISON-${b64}.${sig}`;
+}
+
+test('free room rejects devices beyond the limit', async () => {
+  const { server, url } = await startServer({ maxClientsPerRoom: 2 });
+  try {
+    const a = await connect(url);
+    send(a, { type: 'hello', room: 'free', user: 'a', clientId: 'a', apiKey: '' });
+    await next(a, 'welcome');
+    const b = await connect(url);
+    send(b, { type: 'hello', room: 'free', user: 'b', clientId: 'b', apiKey: '' });
+    await next(b, 'welcome');
+    const c = await connect(url);
+    send(c, { type: 'hello', room: 'free', user: 'c', clientId: 'c', apiKey: '' });
+    const err = await next(c, 'error');
+    assert.match(err.message, /room is full/i);
+  } finally { await server.close(); }
+});
+
+test('a Pro license raises the room limit', async () => {
+  const secret = 'lic-secret';
+  const key = makeKey(secret);
+  const { server, url } = await startServer({ licenseSecret: secret, maxClientsPerRoom: 1, proMaxClients: 10 });
+  try {
+    const a = await connect(url);
+    send(a, { type: 'hello', room: 'pro', user: 'a', clientId: 'a', apiKey: '', license: key });
+    const w = await next(a, 'welcome');
+    assert.equal(w.plan, 'pro');
+    assert.equal(w.limit, 10);
+    const b = await connect(url);
+    send(b, { type: 'hello', room: 'pro', user: 'b', clientId: 'b', apiKey: '' });
+    const w2 = await next(b, 'welcome');
+    assert.equal(w2.plan, 'pro');
   } finally { await server.close(); }
 });
 
