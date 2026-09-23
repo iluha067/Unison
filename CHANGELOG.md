@@ -4,7 +4,7 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
-## [3.3.0] - 2026-09-23
+## [3.3.1] - 2026-09-23
 
 Unison: real-time collaborative vault sync over a hosted WebSocket server.
 
@@ -35,6 +35,11 @@ Unison: real-time collaborative vault sync over a hosted WebSocket server.
 
 ### Changed
 
+- The Pro buy button is a disabled "Coming soon" placeholder until payments are
+  wired up.
+- Connection fields are down to three: server address, API key and room key
+  (the room key is also the room id). They are hidden when using the hosted
+  relay, so the server address is not exposed.
 - The settings tab is reorganized into Room, Plan, Profile, Sync, Updates and a
   collapsible Advanced section.
 - The public server no longer needs a global API key: rooms are protected by

@@ -291,6 +291,11 @@
 	padding: 2px 8px;
 }
 .unison-card-btn { margin-top: 4px; }
+.unison-card-btn.is-soon,
+.unison-btn.is-soon {
+	opacity: .6;
+	cursor: default;
+}
 .unison-card-input {
 	width: 100%;
 	margin-top: 4px;

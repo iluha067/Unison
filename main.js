@@ -224,6 +224,10 @@ const I18N = {
 		planBuyHint: 'After payment you receive a license key; paste it below.',
 		planThanks: 'Pro activated. Thanks!',
 		planFreeActive: 'You are on the Free plan.',
+		planSoon: 'Coming soon',
+		roomKeyName: 'Room key',
+		roomKeyDesc: 'The room secret. Share the invite code; anyone who has it can join.',
+		advancedManaged: 'Managed automatically. The server address and keys are filled in for you.',
 		profileSection: 'Profile',
 		planPerMonth: 'per month',
 		planCurrentBadge: 'Current',
@@ -385,6 +389,10 @@ const I18N = {
 		planBuyHint: 'После оплаты ключ придёт на почту; вставьте его ниже.',
 		planThanks: 'Pro активирован. Спасибо!',
 		planFreeActive: 'У вас бесплатный тариф.',
+		planSoon: 'Скоро',
+		roomKeyName: 'Ключ комнаты',
+		roomKeyDesc: 'Секрет комнаты. Поделитесь кодом-приглашением; кто его знает, тот войдёт.',
+		advancedManaged: 'Управляется автоматически. Адрес сервера и ключи подставлены сами.',
 		profileSection: 'Профиль',
 		planPerMonth: 'в месяц',
 		planCurrentBadge: 'Текущий',
@@ -964,8 +972,9 @@ class UnisonSettingTab extends PluginSettingTab {
 		price.createSpan({ cls: 'unison-card-price-sub', text: ' ' + p.t('planPerMonth') });
 		pro.createDiv({ cls: 'unison-card-desc', text: p.t('planProDesc') });
 		if (p.roomPlan === 'pro') pro.createSpan({ cls: 'unison-card-badge', text: p.t('planCurrentBadge') });
-		const buy = pro.createEl('button', { cls: 'mod-cta unison-btn unison-card-btn', text: p.t('planBuy') });
-		buy.onclick = () => { try { window.open(BUY_URL, '_blank'); } catch (e) { /* ignore */ } };
+		const buy = pro.createEl('button', { cls: 'unison-btn unison-card-btn is-soon', text: p.t('planSoon') });
+		buy.disabled = true;
+		buy.setAttribute('title', p.t('planSoon'));
 		const lic = pro.createEl('input', { cls: 'unison-card-input', type: 'text', placeholder: 'UNISON-...' });
 		lic.value = p.settings.license || '';
 		const applyLic = async () => {
@@ -1029,30 +1038,28 @@ class UnisonSettingTab extends PluginSettingTab {
 		adv.createEl('summary', { text: p.t('advanced') });
 		const advBody = adv.createDiv({ cls: 'unison-guide-body' });
 
-		bindText(new Setting(advBody)
-			.setName(p.t('serverName'))
-			.setDesc(p.t('serverDesc')),
-			() => p.settings.serverUrl,
-			async v => { p.settings.serverUrl = v; await p.saveSettings(); },
-			{ placeholder: 'ws://host:3000' });
-		bindText(new Setting(advBody)
-			.setName(p.t('apiKeyName'))
-			.setDesc(p.t('apiKeyDesc')),
-			() => p.settings.apiKey,
-			async v => { p.settings.apiKey = v; await p.saveSettings(); },
-			{ placeholder: 'key', password: true });
-		bindText(new Setting(advBody)
-			.setName(p.t('roomName'))
-			.setDesc(p.t('roomDesc')),
-			() => p.settings.room,
-			async v => { p.settings.room = v || 'default'; await p.saveSettings(); },
-			{ placeholder: 'my-room' });
-		bindText(new Setting(advBody)
-			.setName(p.t('tokenName'))
-			.setDesc(p.t('tokenDesc')),
-			() => p.settings.token,
-			async v => { p.settings.token = v; await p.saveSettings(); },
-			{ placeholder: '' });
+		if (p.usesOfficial()) {
+			advBody.createEl('p', { cls: 'unison-settings-hint', text: p.t('advancedManaged') });
+		} else {
+			bindText(new Setting(advBody)
+				.setName(p.t('serverName'))
+				.setDesc(p.t('serverDesc')),
+				() => p.settings.serverUrl,
+				async v => { p.settings.serverUrl = v; await p.saveSettings(); },
+				{ placeholder: 'ws://host:3000' });
+			bindText(new Setting(advBody)
+				.setName(p.t('apiKeyName'))
+				.setDesc(p.t('apiKeyDesc')),
+				() => p.settings.apiKey,
+				async v => { p.settings.apiKey = v; await p.saveSettings(); },
+				{ placeholder: 'key', password: true });
+			bindText(new Setting(advBody)
+				.setName(p.t('roomKeyName'))
+				.setDesc(p.t('roomKeyDesc')),
+				() => p.settings.room,
+				async v => { const k = (v || '').trim(); p.settings.room = k || 'default'; p.settings.token = p.settings.room; await p.saveSettings(); },
+				{ placeholder: 'unison-...' });
+		}
 		new Setting(advBody)
 			.setName(p.t('langLabel'))
 			.setDesc(p.t('langDesc'))
@@ -1406,16 +1413,22 @@ module.exports = class UnisonPlugin extends Plugin {
 
 	/** Create a fresh room on the public server and connect to it. */
 	async createRoom() {
+		const key = 'unison-' + genId() + genId().slice(0, 4);
 		this.settings.serverUrl = OFFICIAL_SERVER;
-		this.settings.room = 'unison-' + genId() + genId().slice(0, 4);
+		this.settings.room = key;   // the room key doubles as the room id
+		this.settings.token = key;  // and as the server-side room key
 		this.settings.apiKey = '';
-		this.settings.token = 'rk' + genId() + genId();
 		this._createPending = true;
 		await this.saveSettings();
 		this.disconnect(true);
 		this.connect(true);
 		new Notice(this.t('roomCreated'), 9000);
 		this.refreshPresence();
+	}
+
+	/** True when the connection is the built-in hosted relay. */
+	usesOfficial() {
+		return this.hostRunning() || this.settings.serverUrl === OFFICIAL_SERVER;
 	}
 
 	/** Ask the user for a code, apply it and connect. */
