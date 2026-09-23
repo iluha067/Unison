@@ -1,6 +1,6 @@
 {
   "name": "unison",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "private": true,
   "description": "Unison Obsidian plugin. The shipped plugin is main.js at the repository root (no build step).",
   "scripts": {

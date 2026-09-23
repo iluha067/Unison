@@ -1698,20 +1698,41 @@ module.exports = class UnisonPlugin extends Plugin {
 		return target;
 	}
 
-	async hostWaitReady(port, timeout) {
-		const end = Date.now() + timeout;
-		while (Date.now() < end) {
+	/** Spawn the server and resolve once it is reachable (or clearly alive). */
+	async hostSpawn(exe, script, env, dir, port, onData, isListening) {
+		let child;
+		try {
+			child = require('child_process').spawn(exe, [script], { env, cwd: dir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+		} catch (e) {
+			return { child: null, error: (e && e.message) || String(e) };
+		}
+		try { child.stderr.on('data', onData); } catch (e) { /* ignore */ }
+		try { child.stdout.on('data', onData); } catch (e) { /* ignore */ }
+		let dead = null;
+		child.once('exit', (code, sig) => { dead = `exit ${code}${sig ? ' (' + sig + ')' : ''}`; });
+		child.once('error', (e) => { dead = (e && e.message) || 'spawn error'; });
+		const start = Date.now();
+		while (Date.now() - start < 12000) {
+			if (dead) return { child, error: dead };
+			if (isListening && isListening()) return { child, ready: true, confirmed: true };
+			let healthy = false;
 			try {
 				const r = await requestUrl({ url: `http://127.0.0.1:${port}/health`, throw: false });
-				if (r && r.status === 200 && r.json && r.json.ok) return true;
-			} catch (e) { /* not up yet */ }
-			try {
-				const r2 = await fetch(`http://127.0.0.1:${port}/health`);
-				if (r2 && r2.ok) { const j = await r2.json(); if (j && j.ok) return true; }
-			} catch (e) { /* not up yet */ }
-			await new Promise(res => setTimeout(res, 400));
+				healthy = !!(r && r.status === 200 && r.json && r.json.ok);
+			} catch (e) { /* ignore */ }
+			if (!healthy) {
+				try {
+					const r2 = await fetch(`http://127.0.0.1:${port}/health`);
+					if (r2 && r2.ok) { const j = await r2.json(); healthy = !!(j && j.ok); }
+				} catch (e) { /* ignore */ }
+			}
+			if (healthy) return { child, ready: true, confirmed: true };
+			// Some setups block loopback requests; if the process is still alive
+			// after a moment, assume it is up and let the WebSocket connect decide.
+			if (Date.now() - start > 2500) return { child, ready: true, confirmed: false };
+			await new Promise(r => setTimeout(r, 300));
 		}
-		return false;
+		return { child, error: 'timeout' };
 	}
 
 	/** Start the sync server locally and point the plugin at it. */
@@ -1745,32 +1766,43 @@ module.exports = class UnisonPlugin extends Plugin {
 			PLUGIN_DIR: this.absPluginDir(),
 			API_KEY: this.settings.hostApiKey,
 			ROOM_TOKEN: this.settings.hostToken,
-			LOG_LEVEL: 'warn',
+			LOG_LEVEL: 'info',
 		});
 
-		let child;
-		try {
-			child = cp.spawn(process.execPath, [script], { env, cwd: dir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-		} catch (e) { new Notice(this.t('hostFailed', (e && e.message) || String(e)), 9000); return false; }
-
 		let stderr = '';
-		try { child.stderr.on('data', d => { stderr = (stderr + d.toString()).slice(-1500); }); } catch (e) { /* ignore */ }
-		try { child.stdout.on('data', () => { /* drain */ }); } catch (e) { /* ignore */ }
+		let listening = false;
+		const onData = (d) => {
+			const s = d.toString();
+			stderr = (stderr + s).slice(-2000);
+			if (s.indexOf('listening on') >= 0) listening = true;
+		};
+		const isListening = () => listening;
+		this.log(`host: execPath=${process.execPath} script=${script} port=${port}`);
 
+		let res = await this.hostSpawn(process.execPath, script, env, dir, port, onData, isListening);
+		if (!res.ready) {
+			// Electron may not honour ELECTRON_RUN_AS_NODE here; try a system node.
+			try { if (res.child) res.child.kill(); } catch (e) { /* ignore */ }
+			this.log('host: primary spawn failed (' + (res.error || '?') + '), trying system node');
+			stderr = '';
+			listening = false;
+			res = await this.hostSpawn('node', script, env, dir, port, onData, isListening);
+		}
+		if (!res.ready) {
+			try { if (res.child) res.child.kill(); } catch (e) { /* ignore */ }
+			this._host = null;
+			const detail = stderr.trim() || res.error || 'timeout';
+			new Notice(this.t('hostFailed', detail), 12000);
+			this.log('host failed: ' + detail);
+			return false;
+		}
+		const child = res.child;
 		this._host = { child, port, running: true, shareUrl: `ws://${this.lanAddress()}:${port}`, dataDir: dir };
 		child.on('exit', () => {
 			if (this._host && this._host.child === child) { this._host = null; this.refreshPresence(); }
 		});
 		child.on('error', (e) => { this.log('host process error: ' + ((e && e.message) || e)); });
-
-		const ready = await this.hostWaitReady(port, 12000);
-		if (!ready) {
-			try { child.kill(); } catch (e) { /* ignore */ }
-			this._host = null;
-			new Notice(this.t('hostFailed', stderr.trim() || 'timeout'), 10000);
-			this.log('host failed: ' + (stderr.trim() || 'timeout'));
-			return false;
-		}
+		if (!res.confirmed) this.log('host: process alive but /health not reachable; connecting anyway');
 
 		this.settings.hostEnabled = true;
 		this.settings.serverUrl = `ws://127.0.0.1:${port}`;
