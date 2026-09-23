@@ -16,8 +16,7 @@
 const { Plugin, ItemView, Notice, PluginSettingTab, Setting, MarkdownView, normalizePath, Modal, setIcon, requestUrl, Platform } = require('obsidian');
 
 const VIEW_TYPE_PRESENCE = 'unison-presence';
-// Raw GitHub base for self-updates. For a private repository set an
-// "Update token" in settings; downloads then go through the GitHub API.
+// Raw GitHub base for self-updates.
 const UPDATE_REPO = 'https://raw.githubusercontent.com/iluha067/Unison/main';
 const RECONNECT_MAX = 30000;
 const DEBOUNCE_MS = 300;
@@ -58,7 +57,6 @@ const DEFAULT_SETTINGS = {
 	shareCursor: true,
 	showRemoteLines: true, // highlight lines where collaborators stand (CSS only, never touches text)
 	lang: '',            // '' = auto (system), 'en', 'ru'
-	updateToken: '',     // optional GitHub token, required to update from a private repo
 };
 
 // ---------- i18n ----------
@@ -126,8 +124,6 @@ const I18N = {
 		updateName: 'Plugin update',
 		updateDesc: 'Updates come from GitHub (iluha067/Unison). When a new version exists the plugin notifies you; press this button to download and restart.',
 		checkUpdate: 'Check for update',
-		updateTokenName: 'Update token (private repo)',
-		updateTokenDesc: 'Optional GitHub token with repo read access. Needed only when the plugin repository is private.',
 		guideSummary: 'How to host your own server',
 		guideHint: 'Updates are always taken from the official GitHub. Data syncs through any server you host.',
 		guideFooter: 'The server file and a ready systemd unit are in the GitHub repository.',
@@ -239,8 +235,6 @@ const I18N = {
 		updateName: 'Обновление плагина',
 		updateDesc: 'Обновления берутся с GitHub (iluha067/Unison). Когда выходит новая версия, плагин сообщает об этом; нажмите кнопку, чтобы скачать и перезапустить.',
 		checkUpdate: 'Проверить обновление',
-		updateTokenName: 'Токен обновлений (приватный репозиторий)',
-		updateTokenDesc: 'Необязательный GitHub-токен с доступом на чтение. Нужен, только если репозиторий плагина приватный.',
 		guideSummary: 'Как поднять свой сервер',
 		guideHint: 'Обновления всегда берутся с официального GitHub. Данные синхронизируются через любой ваш сервер.',
 		guideFooter: 'Файл сервера и готовый systemd-сервис - в репозитории на GitHub.',
@@ -893,13 +887,6 @@ class UnisonSettingTab extends PluginSettingTab {
 			.setName(p.t('updateName'))
 			.setDesc(p.t('updateDesc'))
 			.addButton(b => b.setButtonText(p.t('checkUpdate')).onClick(() => p.checkForUpdate(true)));
-
-		bindText(new Setting(containerEl)
-			.setName(p.t('updateTokenName'))
-			.setDesc(p.t('updateTokenDesc')),
-			() => p.settings.updateToken,
-			async v => { p.settings.updateToken = v; await p.saveSettings(); },
-			{ placeholder: 'ghp_...', password: true });
 
 		// ── guide: host your own server ─────────────────────────
 		const det = containerEl.createEl('details', { cls: 'unison-guide' });
@@ -1690,31 +1677,13 @@ module.exports = class UnisonPlugin extends Plugin {
 		return UPDATE_REPO.replace(/\/+$/, '');
 	}
 
-	/** owner/repo/branch parsed from UPDATE_REPO (null when malformed). */
-	updateRepoParts() {
-		const m = this.effectiveUpdateUrl().match(/githubusercontent\.com\/([^/]+)\/([^/]+)\/(.+)$/);
-		return m ? { owner: m[1], repo: m[2], branch: m[3] } : null;
-	}
-
-	/**
-	 * URL to fetch a plugin file. Public repo -> raw CDN (cache-busted);
-	 * private repo (update token set) -> GitHub contents API on the branch.
-	 */
+	/** Cache-busted raw URL for a plugin file. */
 	updateFileUrl(name) {
-		const parts = this.updateRepoParts();
-		if (this.settings.updateToken && parts) {
-			return `https://api.github.com/repos/${parts.owner}/${parts.repo}/contents/${name}?ref=${encodeURIComponent(parts.branch)}&t=${Date.now()}`;
-		}
 		return `${this.effectiveUpdateUrl()}/${name}?t=${Date.now()}`;
 	}
 
 	updateHeaders() {
-		const h = { 'Cache-Control': 'no-cache' };
-		if (this.settings.updateToken) {
-			h.Authorization = 'Bearer ' + this.settings.updateToken;
-			h.Accept = 'application/vnd.github.raw';
-		}
-		return h;
+		return { 'Cache-Control': 'no-cache' };
 	}
 
 	/** Fetch the remote manifest (raw text -> JSON). Returns null on failure. */
@@ -1728,7 +1697,7 @@ module.exports = class UnisonPlugin extends Plugin {
 		return null;
 	}
 
-	/** Download one plugin file as text, honouring the private-repo token. */
+	/** Download one plugin file as text. */
 	async fetchUpdateFile(name) {
 		const r = await requestUrl({ url: this.updateFileUrl(name), throw: false, headers: this.updateHeaders() });
 		if (!r || r.status !== 200 || typeof r.text !== 'string') throw new Error('download failed: ' + name);

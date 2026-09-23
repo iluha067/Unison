@@ -10,8 +10,6 @@ untrusted infrastructure and lock it down accordingly.
 - Anyone who can reach `GET /plugin/*` can download the plugin files (only
   relevant if `PLUGIN_DIR` is set).
 - The server keeps plaintext copies of every file under `DATA_DIR`.
-- A stolen GitHub token with repo write access is out of scope here, but a
-  read-only update token leaks nothing beyond the plugin source.
 
 ## Hardening checklist
 

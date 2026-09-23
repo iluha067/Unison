@@ -4,6 +4,19 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
+## [3.0.1] - 2026-09-23
+
+### Removed
+
+- The optional private-repository "update token". The repository is public, so
+  self-updates fetch files straight from the raw CDN.
+
+### Changed
+
+- README rewritten to be short and public-first.
+- Added a from-scratch server guide (`docs/server-setup.md`); docs reorganized
+  (`docs/updates.md` replaces `docs/private-updates.md`).
+
 ## [3.0.0] - 2026-09-23
 
 Rebrand of "UnisonSync" to **Unison** plus a security and reliability pass.
@@ -15,13 +28,10 @@ Rebrand of "UnisonSync" to **Unison** plus a security and reliability pass.
   `[unison]`. A fresh install into `.obsidian/plugins/unison/` is required.
 - Server and plugin versions are now aligned at `3.0.0` (they used to disagree:
   `1.3.0` vs `2.0.0` vs `2.5.1`).
-- Plugin self-updates now read the repository URL from a single constant and
-  support private repositories via an optional token.
+- Plugin self-updates now read the repository URL from a single constant.
 
 ### Added
 
-- **Private-repo updates** (optional): a token field in settings switches
-  downloads to the GitHub Contents API (`docs/updates.md`).
 - Server: `GET /rooms` and `GET /metrics` (Prometheus text format).
 - Server: graceful shutdown on `SIGINT`/`SIGTERM`, flushing pending writes.
 - Server: idle-room unloading from memory (files remain on disk).
