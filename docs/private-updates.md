@@ -1,7 +1,6 @@
 # Plugin updates (public and private repositories)
 
-The plugin updates itself from the branch configured at the top of
-`plugin/main.js`:
+The plugin updates itself from the branch configured at the top of `main.js`:
 
 ```js
 const UPDATE_REPO = 'https://raw.githubusercontent.com/iluha067/Unison/main';
@@ -46,9 +45,8 @@ update manually.
 
 ## Releasing a new version
 
-1. Bump `version` in `plugin/manifest.json` and `plugin/package.json`.
-2. Add the new entry to `plugin/versions.json` (plugin version → minimum app
-   version).
+1. Bump `version` in `manifest.json` and `package.json`.
+2. Add the new entry to `versions.json` (plugin version → minimum app version).
 3. Add a note to `CHANGELOG.md`.
 4. Commit and push to the branch named in `UPDATE_REPO` (`main`).
 

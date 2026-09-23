@@ -1,0 +1,9 @@
+{
+  "name": "unison",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Unison Obsidian plugin. The shipped plugin is main.js at the repository root (no build step).",
+  "scripts": {
+    "test": "node --test test/merge.test.js"
+  }
+}

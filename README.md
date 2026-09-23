@@ -10,13 +10,17 @@ version history.
 ## Repository layout
 
 ```
-plugin/   Obsidian plugin (id: unison) — manifest.json, main.js, styles.css
-server/   WebSocket sync server (Node.js, dependency: ws)
-docs/     protocol.md · self-hosting.md · private-updates.md
+manifest.json   Obsidian plugin (id: unison) — kept at the repo root
+main.js         the entire plugin, no build step
+styles.css
+versions.json
+server/         WebSocket sync server (Node.js, dependency: ws)
+test/           plugin unit tests (merge engine)
+docs/           protocol.md · self-hosting.md · private-updates.md
 ```
 
-Everything ships as plain files — **no build step**. `plugin/main.js` is the
-whole plugin and can be dropped straight into a vault.
+The plugin files live at the repository root because that is where Obsidian and
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) look for `manifest.json`.
 
 ## Features
 
@@ -42,15 +46,25 @@ whole plugin and can be dropped straight into a vault.
 
 ### Manual (works with a private repo)
 
-1. Copy `plugin/` into your vault as `.obsidian/plugins/unison/` so that the
-   folder contains `manifest.json`, `main.js`, `styles.css`.
+1. Create `.obsidian/plugins/unison/` in your vault and copy `manifest.json`,
+   `main.js` and `styles.css` into it.
 2. In Obsidian: **Settings → Community plugins → enable "Unison"**.
 3. Open **Settings → Unison** and fill in server URL, API key and room.
 
 ### BRAT
 
-Add the repository in [BRAT](https://github.com/TfTHacker/obsidian42-brat).
-BRAT needs to be able to read the repo, so it works best with a public repo.
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) installs plugins from
+GitHub releases and accepts **private** repositories too:
+
+1. Install and enable BRAT.
+2. **BRAT → Add beta plugin** → `iluha067/Unison`.
+3. For a private repo, first add a read-only token: **BRAT settings → GitHub
+   Personal Access Token** (fine-grained, `Contents: Read` on this repo), and/or
+   paste a per-repository token when prompted.
+4. Enable **Unison** in **Settings → Community plugins**.
+
+To let *other people* install without GitHub access, the repository has to be
+**public** — see [`docs/private-updates.md`](docs/private-updates.md).
 
 ## Run your own server
 
@@ -76,11 +90,11 @@ value, and pick a shared **Room** name.
 ## Development
 
 ```bash
+# plugin merge-engine tests (loads main.js with an obsidian stub)
+npm test
+
 # server tests (node:test + ws)
 cd server && npm install && npm test
-
-# plugin merge-engine tests (loads main.js with an obsidian stub)
-cd plugin && npm test
 ```
 
 ## License
