@@ -1,6 +1,6 @@
 {
   "name": "unison-server",
-  "version": "3.0.0",
+  "version": "3.0.2",
   "description": "WebSocket sync server for the Unison Obsidian plugin",
   "main": "server.js",
   "private": true,

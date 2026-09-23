@@ -84,6 +84,8 @@ const I18N = {
 		settings: 'Settings',
 		name: 'Name',
 		color: 'Color',
+		nameDesc: 'Shown to other participants. Keep it unique in the room.',
+		colorDesc: 'Color of your caret, selection and avatar.',
 		auto: 'Auto',
 		colorCustom: 'Custom color',
 		scope: 'Scope',
@@ -195,6 +197,8 @@ const I18N = {
 		settings: 'Настройки',
 		name: 'Имя',
 		color: 'Цвет',
+		nameDesc: 'Отображается другим участникам. Сделайте его уникальным в комнате.',
+		colorDesc: 'Цвет вашего курсора, выделения и аватара.',
 		auto: 'Авто',
 		colorCustom: 'Свой цвет',
 		scope: 'Область',
@@ -567,6 +571,9 @@ class PresenceView extends ItemView {
 	async onOpen() { this.plugin.presenceView = this; this.render(); }
 	async onClose() { if (this.plugin.presenceView === this) this.plugin.presenceView = null; }
 	render() {
+		try { this._render(); } catch (e) { console.error('[unison] panel render failed', e); }
+	}
+	_render() {
 		const root = this.containerEl.children[1];
 		root.empty();
 		root.addClass('unison-view');
@@ -630,20 +637,6 @@ class PresenceView extends ItemView {
 
 	renderSettingsPanel(root, p) {
 		const box = root.createDiv({ cls: 'unison-panel-settings' });
-
-		new Setting(box).setName(p.t('name')).addText(t => t
-			.setValue(p.settings.user || '')
-			.onChange(async v => { p.settings.user = v.trim() || randomName(); p.applyUserColor(); await p.saveSettings(); }));
-
-		// Color: a single custom color wheel (no presets, no hex field).
-		const colorRow = box.createDiv({ cls: 'unison-color-row' });
-		const picker = colorRow.createEl('input', { cls: 'unison-color-picker', type: 'color' });
-		picker.value = normalizeHex(p.settings.userColor) || normalizeHex(colorFor(p.settings.user)) || '#2196f3';
-		colorRow.createSpan({ cls: 'unison-color-label', text: p.t('color') });
-		picker.setAttribute('title', p.t('colorCustom'));
-		picker.oninput = () => { p.settings.userColor = picker.value; p.applyUserColor(); p.refreshPresence(); };
-		picker.onchange = async () => { await p.saveSettings(); };
-		this._colorPickerEl = picker;
 
 		// One compact "Scope" button -> full scope menu (all vs folders + picker)
 		const scopeDesc = (p.settings.scopeMode === 'folders')
@@ -810,6 +803,30 @@ class UnisonSettingTab extends PluginSettingTab {
 				.addOption('ru', 'Русский')
 				.setValue(p.settings.lang || '')
 				.onChange(async v => { p.settings.lang = v; await p.saveSettings(); this.display(); p.refreshPresence(); }));
+
+		// ── profile: name & color (shown to other participants) ─
+		new Setting(containerEl)
+			.setName(p.t('name'))
+			.setDesc(p.t('nameDesc'))
+			.addText(t => t
+				.setPlaceholder(randomName())
+				.setValue(p.settings.user || '')
+				.onChange(async v => {
+					p.settings.user = (v || '').trim() || randomName();
+					p.onProfileChanged();
+					await p.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName(p.t('color'))
+			.setDesc(p.t('colorDesc'))
+			.addColorPicker(c => c
+				.setValue(normalizeHex(p.settings.userColor) || normalizeHex(colorFor(p.settings.user)) || '#2196f3')
+				.onChange(async v => {
+					p.settings.userColor = normalizeHex(v) || v;
+					p.onProfileChanged();
+					await p.saveSettings();
+				}));
 
 		/**
 		 * Text fields must apply every keystroke, an instant Ctrl+V paste and
@@ -1236,6 +1253,12 @@ module.exports = class UnisonPlugin extends Plugin {
 		}
 	}
 
+	/** Name or color changed in settings: recompute color and tell the room. */
+	onProfileChanged() {
+		this.applyUserColor();
+		this.checkNameClash();
+	}
+
 	log(msg) {
 		const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
 		this.syncLog.push(line);
@@ -1273,6 +1296,15 @@ module.exports = class UnisonPlugin extends Plugin {
 		if (this._presenceTimer) return;
 		this._presenceTimer = setTimeout(() => {
 			this._presenceTimer = null;
+			// never rebuild the sidebar while the user works a control inside it
+			try {
+				const el = document.activeElement;
+				const view = this.presenceView;
+				if (el && view && view.containerEl && view.containerEl.contains(el) && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
+					this.refreshPresence();
+					return;
+				}
+			} catch (e) { /* ignore */ }
 			if (this.presenceView) this.presenceView.render();
 			this.updateCountStatus();
 			this.refreshExplorerBadges();

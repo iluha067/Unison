@@ -20,7 +20,7 @@ A client must send `hello` first; any other message before that is answered with
 | `file-pull` | `path` | Ask the server for one file. |
 | `history-list` | `path` | List stored versions. |
 | `history-get` | `path`, `version` | Fetch one stored version. |
-| `cursor` | `path`, `line`, `ch`, `typing?`, `sel?` | `sel` is `{a:{line,ch}, h:{line,ch}}`. |
+| `cursor` | `path`, `line`, `ch`, `typing?`, `sel?`, `user?`, `color?` | `sel` is `{a:{line,ch}, h:{line,ch}}`. A `user`/`color` here refreshes the displayed name/color. |
 
 ## Server → client
 

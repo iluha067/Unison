@@ -4,6 +4,21 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
+## [3.0.2] - 2026-09-23
+
+### Fixed
+
+- Name and color no longer live in the sidebar (they were re-rendered while
+  typing, which could tear the panel apart and blank it). They are now in
+  **Settings -> Unison**.
+- The sidebar is never rebuilt while a control inside it has focus, and a
+  render error can no longer empty the whole panel.
+
+### Changed
+
+- The server now honors a refreshed `user`/`color` on `cursor` messages, so
+  renaming or recoloring updates every other client immediately.
+
 ## [3.0.1] - 2026-09-23
 
 ### Removed

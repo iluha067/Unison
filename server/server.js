@@ -647,8 +647,12 @@ function createServer(overrides = {}) {
           const c = st.clients.get(clientId);
           const cleanSel = sanitizeSel(msg.sel);
           const p2 = sanitizePath(msg.path || '') || '';
-          if (c) { c.path = p2; c.line = msg.line | 0; c.ch = msg.ch | 0; c.sel = cleanSel; }
-          broadcast(room, { type: 'cursor', path: p2, line: msg.line | 0, ch: msg.ch | 0, typing: !!msg.typing, sel: cleanSel, user, clientId, color: (c || {}).color || '#2196f3' }, clientId);
+          // a client may refresh its display name/color through a cursor ping
+          const uname = msg.user ? sanitizeUser(msg.user) : user;
+          user = uname;
+          const ucolor = (typeof msg.color === 'string' && msg.color) ? String(msg.color).slice(0, 16) : (c ? c.color : '#2196f3');
+          if (c) { c.path = p2; c.line = msg.line | 0; c.ch = msg.ch | 0; c.sel = cleanSel; c.user = uname; c.color = ucolor; }
+          broadcast(room, { type: 'cursor', path: p2, line: msg.line | 0, ch: msg.ch | 0, typing: !!msg.typing, sel: cleanSel, user: uname, clientId, color: ucolor }, clientId);
           break;
         }
 
