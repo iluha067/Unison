@@ -4,13 +4,16 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
-## [3.0.3] - 2026-09-23
+## [3.1.0] - 2026-09-23
 
 Unison (formerly UnisonSync / Realtime Sync): real-time collaborative vault
 sync over a self-hosted WebSocket server.
 
 ### Features
 
+- **Host on your computer** (desktop): start the sync server from the plugin
+  with one click and share a single connection code; friends join by pasting it.
+  The plugin spawns a bundled server, so there is no terminal and no install.
 - Live file updates, deletes and renames, broadcast to everyone in the room.
 - Three-way line merge with a line-union fallback, so concurrent typing merges
   in place instead of being overwritten or duplicated.
@@ -20,6 +23,13 @@ sync over a self-hosted WebSocket server.
 - Per-file server-side version history with restore from the command palette.
 - Scope control: whole vault or selected folders, text-only mode, excludes.
 - Quick connect codes and self-update from GitHub releases.
+
+### Changed
+
+- The server is now a single file with **zero dependencies** (its own minimal
+  WebSocket implementation), so hosting needs nothing but Node.js.
+- The sidebar is reduced to one primary action plus a share button; scope,
+  sync mode, name and color moved into settings.
 
 ### Server
 

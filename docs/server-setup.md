@@ -89,12 +89,10 @@ scp manifest.json main.js styles.css \
     root@YOUR_SERVER_IP:/opt/unison/plugin/
 ```
 
-## 6. Install dependencies
+## 6. Dependencies
 
-```bash
-cd /opt/unison
-npm install --omit=dev
-```
+None. The server is a single file with its own minimal WebSocket implementation,
+so there is nothing to install.
 
 ## 7. Generate an access key
 
@@ -235,8 +233,7 @@ Everyone who joins must use the same server, API key and room. If you set
 ```bash
 git clone --depth 1 https://github.com/iluha067/Unison.git /tmp/unison
 cp /tmp/unison/server/server.js /opt/unison/server.js
-cd /opt/unison && npm install --omit=dev
-chown -R unison:unison /opt/unison
+chown unison:unison /opt/unison/server.js
 systemctl restart unison
 rm -rf /tmp/unison
 ```

@@ -203,6 +203,19 @@ test('room storage limit is enforced', async () => {
   } finally { await server.close(); }
 });
 
+test('responds to a WebSocket ping with a pong', async () => {
+  const { server, url } = await startServer({});
+  try {
+    const ws = await connect(url);
+    send(ws, { type: 'hello', room: 'rp', user: 'u', clientId: 'c', apiKey: '' });
+    await next(ws, 'welcome');
+    const pong = new Promise((resolve) => ws.once('pong', resolve));
+    ws.ping();
+    await pong;
+    assert.ok(true);
+  } finally { await server.close(); }
+});
+
 test('health endpoint reports version and auth', async () => {
   const { server } = await startServer({ apiKey: 'secret' });
   try {

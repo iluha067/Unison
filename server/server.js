@@ -19,7 +19,7 @@
  *   MAX_FILE_BYTES, MAX_ROOM_BYTES, MAX_CLIENTS_PER_ROOM, IDLE_UNLOAD_MS ...
  *
  * Run:
- *   npm install --production && node server.js
+ *   node server.js
  */
 
 'use strict';
@@ -28,16 +28,186 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { EventEmitter } = require('events');
 
-let WebSocketServer;
-try {
-  ({ WebSocketServer } = require('ws'));
-} catch (e) {
-  console.error('[unison] missing dependency "ws" - run `npm install` first');
-  throw e;
+let pkg = { version: '0.0.0' };
+try { pkg = require('./package.json'); } catch (e) { /* standalone host: no package.json */ }
+
+// ---------------------------------------------------------------------------
+// minimal WebSocket server (no external dependencies)
+//
+// Implements just enough of RFC 6455 for the Unison protocol: handshake,
+// masked client frames, fragmentation, ping/pong, close and a payload cap.
+// This lets the plugin run the server from a single file with no `npm install`.
+// ---------------------------------------------------------------------------
+
+const WS_OPEN = 1;
+const WS_CLOSING = 2;
+const WS_CLOSED = 3;
+const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+class WSConnection extends EventEmitter {
+  constructor(socket, maxPayload) {
+    super();
+    this.socket = socket;
+    this.readyState = WS_OPEN;
+    this.isAlive = true;
+    this.bufferedAmount = 0;
+    this._maxPayload = maxPayload;
+    this._buf = Buffer.alloc(0);
+    this._fragOpcode = 0;
+    this._fragChunks = [];
+    this._fragLen = 0;
+    this._closedEmitted = false;
+    socket.on('data', (d) => this._onData(d));
+    socket.on('close', () => this._emitClose());
+    socket.on('error', (e) => { this.emit('error', e); this.terminate(); });
+  }
+  _onData(chunk) {
+    this._buf = this._buf.length ? Buffer.concat([this._buf, chunk]) : chunk;
+    while (this.readyState !== WS_CLOSED) {
+      const frame = this._parseFrame();
+      if (!frame) break;
+      this._handleFrame(frame);
+    }
+  }
+  _parseFrame() {
+    const b = this._buf;
+    if (b.length < 2) return null;
+    const fin = (b[0] & 0x80) !== 0;
+    const opcode = b[0] & 0x0f;
+    const masked = (b[1] & 0x80) !== 0;
+    let len = b[1] & 0x7f;
+    let offset = 2;
+    if (len === 126) {
+      if (b.length < offset + 2) return null;
+      len = b.readUInt16BE(offset); offset += 2;
+    } else if (len === 127) {
+      if (b.length < offset + 8) return null;
+      const big = b.readBigUInt64BE(offset); offset += 8;
+      if (big > BigInt(this._maxPayload)) { this.close(1009, 'message too big'); return null; }
+      len = Number(big);
+    }
+    if (len > this._maxPayload) { this.close(1009, 'message too big'); return null; }
+    let maskKey = null;
+    if (masked) {
+      if (b.length < offset + 4) return null;
+      maskKey = b.slice(offset, offset + 4); offset += 4;
+    }
+    if (b.length < offset + len) return null;
+    let payload = b.slice(offset, offset + len);
+    if (masked) {
+      payload = Buffer.from(payload);
+      for (let i = 0; i < payload.length; i++) payload[i] ^= maskKey[i & 3];
+    }
+    this._buf = b.slice(offset + len);
+    return { fin, opcode, payload };
+  }
+  _handleFrame(f) {
+    const { fin, opcode, payload } = f;
+    if (opcode === 0x8) { // close
+      if (this.readyState === WS_OPEN) this._sendFrame(0x8, payload.slice(0, 125));
+      this._closeSocket();
+      return;
+    }
+    if (opcode === 0x9) { this._sendFrame(0xA, payload); return; } // ping -> pong
+    if (opcode === 0xA) { this.isAlive = true; this.emit('pong'); return; }
+    if (opcode === 0x0) { // continuation
+      if (!this._fragOpcode) return;
+      this._fragChunks.push(payload); this._fragLen += payload.length;
+      if (this._fragLen > this._maxPayload) { this.close(1009, 'message too big'); return; }
+      if (fin) {
+        const full = Buffer.concat(this._fragChunks);
+        const op = this._fragOpcode;
+        this._fragOpcode = 0; this._fragChunks = []; this._fragLen = 0;
+        this._emitMessage(op, full);
+      }
+      return;
+    }
+    if (opcode === 0x1 || opcode === 0x2) {
+      if (fin) this._emitMessage(opcode, payload);
+      else { this._fragOpcode = opcode; this._fragChunks = [payload]; this._fragLen = payload.length; }
+    }
+  }
+  _emitMessage(opcode, buf) { this.emit('message', buf); }
+  _sendFrame(opcode, payload) {
+    if (this.readyState === WS_CLOSED) return false;
+    payload = payload || Buffer.alloc(0);
+    const len = payload.length;
+    let header;
+    if (len < 126) { header = Buffer.alloc(2); header[1] = len; }
+    else if (len < 65536) { header = Buffer.alloc(4); header[1] = 126; header.writeUInt16BE(len, 2); }
+    else { header = Buffer.alloc(10); header[1] = 127; header.writeBigUInt64BE(BigInt(len), 2); }
+    header[0] = 0x80 | opcode;
+    try {
+      this.socket.write(Buffer.concat([header, payload]));
+      this.bufferedAmount = this.socket.writableLength;
+      return true;
+    } catch (e) { return false; }
+  }
+  send(data) { return this._sendFrame(0x1, Buffer.from(String(data), 'utf8')); }
+  ping() { return this._sendFrame(0x9, Buffer.alloc(0)); }
+  close(code, reason) {
+    if (this.readyState !== WS_OPEN) { this._closeSocket(); return; }
+    this.readyState = WS_CLOSING;
+    const r = Buffer.from(reason || '', 'utf8').slice(0, 123);
+    const p = Buffer.alloc(2 + r.length);
+    p.writeUInt16BE(code || 1000, 0);
+    r.copy(p, 2);
+    this._sendFrame(0x8, p);
+    this._closeSocket();
+  }
+  _closeSocket() {
+    if (this.readyState === WS_CLOSED) return;
+    this.readyState = WS_CLOSED;
+    try { this.socket.end(); } catch (e) { /* ignore */ }
+    this._emitClose();
+  }
+  terminate() {
+    this._closeSocket();
+    try { this.socket.destroy(); } catch (e) { /* ignore */ }
+  }
+  _emitClose() {
+    if (this._closedEmitted) return;
+    this._closedEmitted = true;
+    this.readyState = WS_CLOSED;
+    this.emit('close');
+  }
 }
 
-const pkg = require('./package.json');
+class WebSocketServer extends EventEmitter {
+  constructor(opts) {
+    super();
+    this.clients = new Set();
+    this._server = opts.server;
+    this._maxPayload = opts.maxPayload || 32 * 1024 * 1024;
+    this._server.on('upgrade', (req, socket, head) => this._handleUpgrade(req, socket, head));
+  }
+  _handleUpgrade(req, socket, head) {
+    const key = req.headers['sec-websocket-key'];
+    if (!key) { try { socket.destroy(); } catch (e) { /* ignore */ } return; }
+    const accept = crypto.createHash('sha1').update(key + WS_GUID).digest('base64');
+    try {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\n' +
+        'Upgrade: websocket\r\n' +
+        'Connection: Upgrade\r\n' +
+        'Sec-WebSocket-Accept: ' + accept + '\r\n\r\n'
+      );
+    } catch (e) { try { socket.destroy(); } catch (e2) { /* ignore */ } return; }
+    const ws = new WSConnection(socket, this._maxPayload);
+    this.clients.add(ws);
+    ws.on('close', () => this.clients.delete(ws));
+    this.emit('connection', ws, req);
+    if (head && head.length) ws._onData(head);
+  }
+  close(cb) {
+    for (const ws of this.clients) { try { ws.terminate(); } catch (e) { /* ignore */ } }
+    try { this._server.removeListener('upgrade', this._onUpgrade); } catch (e) { /* ignore */ }
+    if (cb) cb();
+  }
+}
+
 
 // ---------------------------------------------------------------------------
 // config

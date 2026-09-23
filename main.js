@@ -18,6 +18,8 @@ const { Plugin, ItemView, Notice, PluginSettingTab, Setting, MarkdownView, norma
 const VIEW_TYPE_PRESENCE = 'unison-presence';
 // Raw GitHub base for self-updates.
 const UPDATE_REPO = 'https://raw.githubusercontent.com/iluha067/Unison/main';
+// Server source used by the built-in "host on this computer" feature (desktop).
+const HOST_SERVER_URL = UPDATE_REPO + '/server/server.js';
 const RECONNECT_MAX = 30000;
 const DEBOUNCE_MS = 300;
 const CURSOR_THROTTLE_MS = 150;
@@ -57,6 +59,11 @@ const DEFAULT_SETTINGS = {
 	shareCursor: true,
 	showRemoteLines: true, // highlight lines where collaborators stand (CSS only, never touches text)
 	lang: '',            // '' = auto (system), 'en', 'ru'
+	hostEnabled: false,  // desktop: run the server locally (auto-start on launch)
+	hostPort: 3210,      // port for the locally hosted server
+	hostRoom: '',        // generated room for the local server
+	hostApiKey: '',      // generated API key for the local server
+	hostToken: '',       // generated room token for the local server
 };
 
 // ---------- i18n ----------
@@ -166,6 +173,27 @@ const I18N = {
 		quickApply: 'Apply and connect',
 		copyCodeName: 'Connection code',
 		copyCodeDesc: 'Share this code so a friend can connect with one paste.',
+		hostSection: 'Host a server (this computer)',
+		hostName: 'Host on this computer',
+		hostDesc: 'Run the sync server right here and send a friend a single code. Desktop only; the friend must be on the same network unless you forward the port.',
+		hostStart: 'Start server',
+		hostStop: 'Stop server',
+		hostStarting: 'Starting the server...',
+		hostStarted: (url) => `Server started. Share: ${url}`,
+		hostStopped: 'Server stopped',
+		hostFailed: (e) => `Could not start the server: ${e}`,
+		hostNotSupported: 'Hosting is not supported on this device.',
+		hostMobile: 'Hosting works on desktop only. On mobile, join with a connection code.',
+		hostRunning: (url) => `Running at ${url}`,
+		hostAddr: (url) => `Address: ${url}`,
+		hostInviteName: 'Invite a friend',
+		hostInviteDesc: 'Send this code. They install Unison, paste it and connect.',
+		copyInvite: 'Copy invite code',
+		hostAutoName: 'Start on launch',
+		hostAutoDesc: 'Start the server automatically when Obsidian opens.',
+		connSection: 'Connection',
+		syncSection: 'Sync',
+		updateSection: 'Updates',
 		inviteFail: 'Could not copy',
 		inviteText: 'Server: {server}\nRoom: {room}\nInstall Unison and enter these. Pick a unique name!',
 		invite: 'Copy invite',
@@ -279,6 +307,27 @@ const I18N = {
 		quickApply: 'Применить и подключиться',
 		copyCodeName: 'Код подключения',
 		copyCodeDesc: 'Передайте этот код другу - он подключится одним вставлением.',
+		hostSection: 'Свой сервер (этот компьютер)',
+		hostName: 'Запустить сервер на этом компьютере',
+		hostDesc: 'Поднять сервер синхронизации прямо здесь и отправить другу один код. Только на ПК; друг должен быть в той же сети, если порт не проброшен.',
+		hostStart: 'Запустить сервер',
+		hostStop: 'Остановить сервер',
+		hostStarting: 'Запускаю сервер...',
+		hostStarted: (url) => `Сервер запущен. Поделиться: ${url}`,
+		hostStopped: 'Сервер остановлен',
+		hostFailed: (e) => `Не удалось запустить сервер: ${e}`,
+		hostNotSupported: 'На этом устройстве хостинг недоступен.',
+		hostMobile: 'Хостинг работает только на ПК. На телефоне подключайтесь по коду.',
+		hostRunning: (url) => `Работает: ${url}`,
+		hostAddr: (url) => `Адрес: ${url}`,
+		hostInviteName: 'Пригласить друга',
+		hostInviteDesc: 'Отправьте этот код. Друг ставит Unison, вставляет код и подключается.',
+		copyInvite: 'Скопировать код',
+		hostAutoName: 'Запускать при старте',
+		hostAutoDesc: 'Автоматически запускать сервер при открытии Obsidian.',
+		connSection: 'Подключение',
+		syncSection: 'Синхронизация',
+		updateSection: 'Обновления',
 		inviteFail: 'Не удалось скопировать',
 		inviteText: 'Сервер: {server}\nКомната: {room}\nПоставь плагин Unison и введи эти данные. Имя выбери уникальное!',
 		invite: 'Скопировать приглашение',
@@ -594,10 +643,23 @@ class PresenceView extends ItemView {
 			meta.createSpan({ text: p.settings.serverUrl.replace(/^wss?:\/\//, '') });
 		}
 
-		// ── actions ─────────────────────────────────────────────
+		// ── primary action + share ──────────────────────────────
 		const actions = root.createDiv({ cls: 'unison-actions' });
-		this.button(actions, p.connected ? p.t('disconnect') : p.t('connect'), () => { p.connected ? p.disconnect() : p.connect(true); });
-		this.button(actions, '', () => p.requestFullSync(), p.connected ? 'unison-btn-icon' : 'unison-btn-icon is-disabled', p.t('fullSync'), 'refresh-cw');
+		if (p.hostRunning()) {
+			this.button(actions, p.t('hostStop'), () => { p.hostStop(); });
+			this.button(actions, '', () => p.copyConnectionCode(), 'unison-btn-icon', p.t('copyInvite'), 'share-2');
+		} else if (p.connected) {
+			this.button(actions, p.t('disconnect'), () => p.disconnect());
+			this.button(actions, '', () => p.copyConnectionCode(), 'unison-btn-icon', p.t('copyInvite'), 'share-2');
+		} else if (p.isDesktop() && (!p.settings.serverUrl || /^wss?:\/\/(127\.0\.0\.1|localhost)/i.test(p.settings.serverUrl))) {
+			this.button(actions, p.t('hostStart'), () => { p.hostStart(); });
+		} else {
+			this.button(actions, p.t('connect'), () => p.connect(true));
+		}
+
+		if (p.hostRunning()) {
+			root.createDiv({ cls: 'unison-host-info', text: p.t('hostAddr', p.hostShareUrl()) });
+		}
 
 		if (!p.connected) {
 			const box = root.createDiv({ cls: 'unison-offline' });
@@ -622,35 +684,10 @@ class PresenceView extends ItemView {
 			for (const u of all) this.renderUserCard(list, u);
 		}
 
-		// ── quick settings ──────────────────────────────────────
-		const gear = root.createDiv({ cls: 'unison-gear' });
-		gear.createSpan({ text: p.t('settings') });
-		const caret = gear.createSpan({ cls: 'unison-gear-caret', text: p._panelSettingsOpen ? '▾' : '▸' });
-		gear.onclick = () => { p._panelSettingsOpen = !p._panelSettingsOpen; p.refreshPresence(); };
-		if (p._panelSettingsOpen) this.renderSettingsPanel(root, p);
-
 		// ── footer ──────────────────────────────────────────────
 		const foot = root.createDiv({ cls: 'unison-foot', text: p.syncStateText() });
 		foot.setAttribute('title', p.t('logTitle'));
 		foot.onclick = () => new LogModal(this.app, p).open();
-	}
-
-	renderSettingsPanel(root, p) {
-		const box = root.createDiv({ cls: 'unison-panel-settings' });
-
-		// One compact "Scope" button -> full scope menu (all vs folders + picker)
-		const scopeDesc = (p.settings.scopeMode === 'folders')
-			? p.t('scopeFolders', (p.settings.syncFolders || []).length)
-			: p.t('scopeAll');
-		new Setting(box).setName(p.t('scope')).setDesc(scopeDesc)
-			.addButton(b => b.setButtonText(p.t('scopeChange')).onClick(() => new ScopeModal(this.app, p).open()));
-
-		new Setting(box).setName(p.t('whatToSync'))
-			.addDropdown(d => d
-				.addOption('all', p.t('allFiles'))
-				.addOption('text', p.t('textOnly'))
-				.setValue(p.settings.syncMode || 'all')
-				.onChange(async v => { p.settings.syncMode = v; await p.saveSettings(); }));
 	}
 
 	button(parent, label, onClick, extraCls, tooltip, icon) {
@@ -853,6 +890,37 @@ class UnisonSettingTab extends PluginSettingTab {
 			return setting;
 		};
 
+		// ── host (desktop) ─────────────────────────────────────
+		if (p.isDesktop()) {
+			containerEl.createEl('h3', { text: p.t('hostSection') });
+			new Setting(containerEl)
+				.setName(p.t('hostName'))
+				.setDesc(p.hostRunning() ? p.t('hostRunning', p.hostShareUrl()) : p.t('hostDesc'))
+				.addButton(b => b
+					.setButtonText(p.hostRunning() ? p.t('hostStop') : p.t('hostStart'))
+					.setCta()
+					.onClick(async () => {
+						b.setDisabled(true);
+						if (p.hostRunning()) await p.hostStop(); else await p.hostStart();
+						this.display();
+					}));
+			if (p.hostRunning()) {
+				new Setting(containerEl)
+					.setName(p.t('hostInviteName'))
+					.setDesc(p.t('hostInviteDesc'))
+					.addButton(b => b.setButtonText(p.t('copyInvite')).onClick(() => p.copyConnectionCode()));
+			}
+			new Setting(containerEl)
+				.setName(p.t('hostAutoName'))
+				.setDesc(p.t('hostAutoDesc'))
+				.addToggle(t => t.setValue(!!p.settings.hostEnabled)
+					.onChange(async v => { p.settings.hostEnabled = v; await p.saveSettings(); }));
+		} else {
+			containerEl.createEl('p', { cls: 'unison-settings-hint', text: p.t('hostMobile') });
+		}
+
+		// ── connection ─────────────────────────────────────────
+		containerEl.createEl('h3', { text: p.t('connSection') });
 		bindText(new Setting(containerEl)
 			.setName(p.t('serverName'))
 			.setDesc(p.t('serverDesc')),
@@ -900,6 +968,25 @@ class UnisonSettingTab extends PluginSettingTab {
 			.addButton(b => b.setButtonText(p.t('copyCodeName')).onClick(() => p.copyConnectionCode()))
 			.addButton(b => b.setButtonText(p.t('quickTitle')).onClick(() => p.quickConnect()));
 
+		// ── sync ───────────────────────────────────────────────
+		containerEl.createEl('h3', { text: p.t('syncSection') });
+		const scopeDesc = (p.settings.scopeMode === 'folders')
+			? p.t('scopeFolders', (p.settings.syncFolders || []).length)
+			: p.t('scopeAll');
+		new Setting(containerEl)
+			.setName(p.t('scope'))
+			.setDesc(scopeDesc)
+			.addButton(b => b.setButtonText(p.t('scopeChange')).onClick(() => new ScopeModal(this.app, p).open()));
+		new Setting(containerEl)
+			.setName(p.t('whatToSync'))
+			.addDropdown(d => d
+				.addOption('all', p.t('allFiles'))
+				.addOption('text', p.t('textOnly'))
+				.setValue(p.settings.syncMode || 'all')
+				.onChange(async v => { p.settings.syncMode = v; await p.saveSettings(); p.requestFullSync(); }));
+
+		// ── updates ────────────────────────────────────────────
+		containerEl.createEl('h3', { text: p.t('updateSection') });
 		new Setting(containerEl)
 			.setName(p.t('updateName'))
 			.setDesc(p.t('updateDesc'))
@@ -918,7 +1005,7 @@ class UnisonSettingTab extends PluginSettingTab {
 			'# 2. Create folder and files',
 			'mkdir -p /opt/unison && cd /opt/unison',
 			'#   server.js  - server file (see the GitHub repo)',
-			'#   npm install ws',
+			'#   (no dependencies - nothing to install)',
 			'',
 			'# 3. Run with an access key',
 			'API_KEY="your-secret-key" ROOM_TOKEN="room-password" \\',
@@ -1120,7 +1207,10 @@ module.exports = class UnisonPlugin extends Plugin {
 
 	/** Startup: connect, then quietly check whether a newer version exists. */
 	async startup() {
-		if (this.settings.autoConnect) setTimeout(() => this.connect(), 800);
+		if (this.settings.autoConnect) {
+			if (this.settings.hostEnabled && this.isDesktop()) setTimeout(() => this.hostStart(), 800);
+			else setTimeout(() => this.connect(), 800);
+		}
 		// let the connection settle, then notify if an update is available
 		setTimeout(() => this.checkForUpdate(false), 8000);
 	}
@@ -1172,6 +1262,8 @@ module.exports = class UnisonPlugin extends Plugin {
 		for (const t of this.debounceTimers.values()) clearTimeout(t);
 		this.debounceTimers.clear();
 		try { if (this.ws && this.ws.readyState === 1) this.ws.close(); } catch (e) { /* ignore */ }
+		try { if (this._host && this._host.child) this._host.child.kill(); } catch (e) { /* ignore */ }
+		this._host = null;
 		this.app.workspace.detachLeavesOfType(VIEW_TYPE_PRESENCE);
 	}
 
@@ -1198,7 +1290,7 @@ module.exports = class UnisonPlugin extends Plugin {
 	makeConnectionCode() {
 		const payload = {
 			v: 1,
-			s: this.settings.serverUrl || '',
+			s: this.shareServerUrl(),
 			r: this.settings.room || '',
 			k: this.settings.apiKey || '',
 			t: this.settings.token || '',
@@ -1219,7 +1311,7 @@ module.exports = class UnisonPlugin extends Plugin {
 	}
 
 	copyConnectionCode() {
-		if (!this.settings.serverUrl) { new Notice(this.t('needServerUrl')); return; }
+		if (!this.shareServerUrl()) { new Notice(this.t('needServerUrl')); return; }
 		const code = this.makeConnectionCode();
 		navigator.clipboard.writeText(code).then(() => new Notice(this.t('codeCopied'), 5000), () => new Notice(this.t('inviteFail')));
 	}
@@ -1542,6 +1634,167 @@ module.exports = class UnisonPlugin extends Plugin {
 			this.send({ type: 'file-update', path, content: merged, encoding: 'utf8', mtime: Date.now(), clientId: this.clientId, user: this.settings.user });
 			this.log(`editor-merge ${path}: three-way with unsaved buffer, pushed`);
 		}
+	}
+
+	// ---------- host a server on this computer (desktop) ----------
+	/** True on Obsidian desktop (Electron), where we can spawn a local server. */
+	isDesktop() {
+		try { return !!(Platform && (Platform.isDesktopApp || Platform.isDesktop)); } catch (e) { return false; }
+	}
+
+	hostRunning() { return !!(this._host && this._host.running); }
+
+	hostShareUrl() { return (this._host && this._host.shareUrl) || ''; }
+
+	/** URL others should use: the hosted LAN address, or the configured server. */
+	shareServerUrl() {
+		if (this.hostRunning()) return this.hostShareUrl();
+		return this.settings.serverUrl || '';
+	}
+
+	/** First non-internal IPv4 address, else loopback. */
+	lanAddress() {
+		try {
+			const os = require('os');
+			const ifaces = os.networkInterfaces();
+			for (const name of Object.keys(ifaces)) {
+				for (const ni of (ifaces[name] || [])) {
+					if (ni && ni.family === 'IPv4' && !ni.internal) return ni.address;
+				}
+			}
+		} catch (e) { /* ignore */ }
+		return '127.0.0.1';
+	}
+
+	/** Absolute path of the plugin folder (Node fs needs an absolute path). */
+	absPluginDir() {
+		try {
+			const path = require('path');
+			let base = '';
+			try { base = (this.app.vault.adapter.getBasePath && this.app.vault.adapter.getBasePath()) || ''; } catch (e) { base = ''; }
+			let rel = (this.manifest && this.manifest.dir) || '';
+			if (!rel) {
+				const cfg = (this.app.vault.configDir || '.obsidian');
+				rel = `${cfg}/plugins/${(this.manifest && this.manifest.id) || 'unison'}`;
+			}
+			if (base && !path.isAbsolute(rel)) return path.join(base, rel);
+			return rel || this.pluginDir();
+		} catch (e) { return this.pluginDir(); }
+	}
+
+	/** Download (once) the dependency-free server next to the plugin. */
+	async ensureHostScript() {
+		const fs = require('fs');
+		const path = require('path');
+		const target = path.join(this.absPluginDir(), 'unison-host.cjs');
+		let ok = false;
+		try { const st = fs.statSync(target); ok = !!(st && st.size > 1000); } catch (e) { ok = false; }
+		if (ok) return target;
+		const r = await requestUrl({ url: HOST_SERVER_URL, throw: false, headers: { 'Cache-Control': 'no-cache' } });
+		if (!r || r.status !== 200 || typeof r.text !== 'string' || r.text.length < 1000) {
+			throw new Error('download failed');
+		}
+		await fs.promises.writeFile(target, r.text, 'utf8');
+		return target;
+	}
+
+	async hostWaitReady(port, timeout) {
+		const end = Date.now() + timeout;
+		while (Date.now() < end) {
+			try {
+				const r = await requestUrl({ url: `http://127.0.0.1:${port}/health`, throw: false });
+				if (r && r.status === 200 && r.json && r.json.ok) return true;
+			} catch (e) { /* not up yet */ }
+			try {
+				const r2 = await fetch(`http://127.0.0.1:${port}/health`);
+				if (r2 && r2.ok) { const j = await r2.json(); if (j && j.ok) return true; }
+			} catch (e) { /* not up yet */ }
+			await new Promise(res => setTimeout(res, 400));
+		}
+		return false;
+	}
+
+	/** Start the sync server locally and point the plugin at it. */
+	async hostStart() {
+		if (!this.isDesktop()) { new Notice(this.t('hostMobile')); return false; }
+		if (this.hostRunning()) return true;
+		let cp;
+		try { cp = require('child_process'); }
+		catch (e) { new Notice(this.t('hostNotSupported')); return false; }
+
+		new Notice(this.t('hostStarting'), 4000);
+		let script;
+		try { script = await this.ensureHostScript(); }
+		catch (e) { new Notice(this.t('hostFailed', (e && e.message) || String(e)), 9000); return false; }
+
+		const fs = require('fs');
+		const dir = require('path').join(this.absPluginDir(), 'host-data');
+		try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { /* ignore */ }
+
+		if (!this.settings.hostRoom) this.settings.hostRoom = 'unison-' + genId().slice(0, 6);
+		if (!this.settings.hostApiKey) this.settings.hostApiKey = 'uk' + genId() + genId();
+		if (!this.settings.hostToken) this.settings.hostToken = 'rt' + genId() + genId();
+		await this.saveSettings();
+
+		const port = this.settings.hostPort || 3210;
+		const env = Object.assign({}, process.env, {
+			ELECTRON_RUN_AS_NODE: '1',
+			PORT: String(port),
+			HOST: '0.0.0.0',
+			DATA_DIR: dir,
+			PLUGIN_DIR: this.absPluginDir(),
+			API_KEY: this.settings.hostApiKey,
+			ROOM_TOKEN: this.settings.hostToken,
+			LOG_LEVEL: 'warn',
+		});
+
+		let child;
+		try {
+			child = cp.spawn(process.execPath, [script], { env, cwd: dir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+		} catch (e) { new Notice(this.t('hostFailed', (e && e.message) || String(e)), 9000); return false; }
+
+		let stderr = '';
+		try { child.stderr.on('data', d => { stderr = (stderr + d.toString()).slice(-1500); }); } catch (e) { /* ignore */ }
+		try { child.stdout.on('data', () => { /* drain */ }); } catch (e) { /* ignore */ }
+
+		this._host = { child, port, running: true, shareUrl: `ws://${this.lanAddress()}:${port}`, dataDir: dir };
+		child.on('exit', () => {
+			if (this._host && this._host.child === child) { this._host = null; this.refreshPresence(); }
+		});
+		child.on('error', (e) => { this.log('host process error: ' + ((e && e.message) || e)); });
+
+		const ready = await this.hostWaitReady(port, 12000);
+		if (!ready) {
+			try { child.kill(); } catch (e) { /* ignore */ }
+			this._host = null;
+			new Notice(this.t('hostFailed', stderr.trim() || 'timeout'), 10000);
+			this.log('host failed: ' + (stderr.trim() || 'timeout'));
+			return false;
+		}
+
+		this.settings.hostEnabled = true;
+		this.settings.serverUrl = `ws://127.0.0.1:${port}`;
+		this.settings.room = this.settings.hostRoom;
+		this.settings.apiKey = this.settings.hostApiKey;
+		this.settings.token = this.settings.hostToken;
+		await this.saveSettings();
+
+		this.disconnect(true);
+		this.connect(true);
+		new Notice(this.t('hostStarted', this._host.shareUrl), 10000);
+		this.refreshPresence();
+		return true;
+	}
+
+	async hostStop() {
+		const h = this._host;
+		this._host = null;
+		if (h && h.child) { try { h.child.kill(); } catch (e) { /* ignore */ } }
+		this.settings.hostEnabled = false;
+		await this.saveSettings();
+		this.disconnect(true);
+		new Notice(this.t('hostStopped'), 4000);
+		this.refreshPresence();
 	}
 
 	// ---------- connection ----------

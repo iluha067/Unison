@@ -1,12 +1,11 @@
 # Unison server
 
-WebSocket sync hub for the [Unison](../plugin) Obsidian plugin. One Node.js
-file, one dependency (`ws`). See [`../docs/server-setup.md`](../docs/server-setup.md)
-for full deployment instructions and [`../docs/protocol.md`](../docs/protocol.md)
-for the wire format.
+WebSocket sync hub for the [Unison](../) Obsidian plugin. A single Node.js file
+with **zero dependencies** (it ships its own minimal WebSocket implementation).
+See [`../docs/server-setup.md`](../docs/server-setup.md) for full deployment
+instructions and [`../docs/protocol.md`](../docs/protocol.md) for the wire format.
 
 ```bash
-npm install --production
 API_KEY="your-long-random-key" PORT=3000 DATA_DIR=./data node server.js
 ```
 

@@ -9,10 +9,10 @@
     "start": "node server.js",
     "test": "node --test"
   },
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "ws": "^8.18.0"
   },
-  "devDependencies": {},
   "engines": {
     "node": ">=18"
   }

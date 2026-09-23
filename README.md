@@ -23,6 +23,9 @@ version history. It runs on Obsidian desktop (Windows, macOS, Linux) and mobile
 - **Scope control** - whole vault or selected folders, optional text-only mode,
   exclude patterns.
 - **Quick connect** - share server, room and keys as one paste-able code.
+- **Host on your computer** - on desktop, start the sync server with one click
+  and send a friend a single code; no terminal, no separate install. The friend
+  just pastes the code.
 - **Self-update** - installs new versions from GitHub releases.
 
 ## Install the plugin
@@ -49,7 +52,6 @@ Minimal start:
 
 ```bash
 cd server
-npm install --omit=dev
 API_KEY="$(head -c32 /dev/urandom | base64)" PORT=3000 DATA_DIR=./data node server.js
 ```
 
