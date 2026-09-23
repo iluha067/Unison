@@ -3,10 +3,13 @@
 Real-time collaborative sync for [Obsidian](https://obsidian.md). Several people
 connect the same vault through a small self-hosted WebSocket server: edits merge
 live, text and binary files stay in sync, and every file keeps server-side
-version history.
+version history. It runs on Obsidian desktop (Windows, macOS, Linux) and mobile
+(iOS and Android).
 
 ## Features
 
+- **Desktop and mobile** - works on Obsidian for Windows, macOS, Linux, iOS and
+  Android, from the same vault and the same server.
 - **Live collaboration** - updates, deletes and renames go to everyone in the
   room within milliseconds.
 - **Three-way merge** - concurrent typing merges in place, never silently
