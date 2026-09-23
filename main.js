@@ -701,8 +701,6 @@ class PresenceView extends ItemView {
 		if (p.connected) {
 			meta.createSpan({ text: p.roomPlan === 'pro' ? p.t('onlineCount', p.remoteUsers.size + 1) : p.t('peopleMax', p.remoteUsers.size + 1, p.roomLimit || 5) });
 			if (p.latency > 0) meta.createSpan({ text: ` · ${p.latency} ms` });
-		} else {
-			meta.createSpan({ text: p.settings.serverUrl.replace(/^wss?:\/\//, '') });
 		}
 
 		// ── primary action + share ──────────────────────────────

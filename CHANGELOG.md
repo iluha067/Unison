@@ -4,7 +4,7 @@ All notable changes to Unison are documented here. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 `MAJOR.MINOR.PATCH` versions across the plugin and the server.
 
-## [3.4.0] - 2026-09-23
+## [3.4.1] - 2026-09-23
 
 Unison: real-time collaborative vault sync over a hosted WebSocket server.
 
@@ -60,6 +60,7 @@ Unison: real-time collaborative vault sync over a hosted WebSocket server.
 
 ### Fixed
 
+- The sidebar no longer shows the server address in the header.
 - Name and color moved to Settings (they were re-rendered in the sidebar while
   typing, which could tear the panel apart or blank it).
 - The sidebar is never rebuilt while one of its controls has focus, and a render
